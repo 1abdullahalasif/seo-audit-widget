@@ -6,14 +6,12 @@ interface FormData {
   websiteUrl: string;
   email: string;
   name: string;
-  companyDomain: string;
 }
 
 interface FormErrors {
   websiteUrl?: string;
   email?: string;
   name?: string;
-  companyDomain?: string;
 }
 
 interface AuditResults {
@@ -43,8 +41,7 @@ const SEOAuditWidget: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
     websiteUrl: '',
     email: '',
-    name: '',
-    companyDomain: ''
+    name: ''
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'completed' | 'error'>('idle');
@@ -68,10 +65,6 @@ const SEOAuditWidget: React.FC = () => {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
-    }
-
-    if (!formData.companyDomain) {
-      newErrors.companyDomain = 'Company domain is required';
     }
 
     return { 
@@ -167,6 +160,7 @@ const SEOAuditWidget: React.FC = () => {
                     setErrors(restErrors);
                   }
                 }}
+                placeholder="https://example.com"
                 required
               />
               {errors.websiteUrl && (
@@ -192,6 +186,7 @@ const SEOAuditWidget: React.FC = () => {
                     setErrors(restErrors);
                   }
                 }}
+                placeholder="John Doe"
                 required
               />
               {errors.name && (
@@ -217,35 +212,11 @@ const SEOAuditWidget: React.FC = () => {
                     setErrors(restErrors);
                   }
                 }}
+                placeholder="john@example.com"
                 required
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-500">{errors.email}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="companyDomain" className="block text-sm font-medium text-gray-700">
-                Company Domain *
-              </label>
-              <input
-                type="text"
-                id="companyDomain"
-                className={`mt-1 block w-full rounded-md border ${
-                  errors.companyDomain ? 'border-red-500' : 'border-gray-300'
-                } p-2 focus:ring-[#ff9270] focus:border-[#ff9270]`}
-                value={formData.companyDomain}
-                onChange={(e) => {
-                  setFormData({ ...formData, companyDomain: e.target.value });
-                  if (errors.companyDomain) {
-                    const { companyDomain, ...restErrors } = errors;
-                    setErrors(restErrors);
-                  }
-                }}
-                required
-              />
-              {errors.companyDomain && (
-                <p className="mt-1 text-sm text-red-500">{errors.companyDomain}</p>
               )}
             </div>
 

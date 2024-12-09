@@ -1,5 +1,5 @@
 // src/components/audit/SEOAuditWidget.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 interface FormData {
@@ -37,9 +37,10 @@ interface AuditResults {
   };
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
+const API_URL = 'https://seo-audit-backend.onrender.com/api';
 
 const SEOAuditWidget: React.FC = () => {
+  const [isBackendUp, setIsBackendUp] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     websiteUrl: '',
     email: '',
@@ -49,6 +50,20 @@ const SEOAuditWidget: React.FC = () => {
   const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'completed' | 'error'>('idle');
   const [results, setResults] = useState<AuditResults | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkBackendStatus();
+  }, []);
+
+  const checkBackendStatus = async () => {
+    try {
+      const response = await fetch(`${API_URL}/health`);
+      setIsBackendUp(response.ok);
+    } catch (error) {
+      console.error('Backend health check failed:', error);
+      setIsBackendUp(false);
+    }
+  };
 
   const validateForm = (): { isValid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
@@ -74,8 +89,14 @@ const SEOAuditWidget: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { isValid, errors } = validateForm();
+    
+    if (!isBackendUp) {
+      setErrorMessage('Service is temporarily unavailable. Please try again later.');
+      setAuditStatus('error');
+      return;
+    }
 
+    const { isValid, errors } = validateForm();
     if (!isValid) {
       setErrors(errors);
       return;
@@ -85,28 +106,24 @@ const SEOAuditWidget: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      console.log('Submitting to:', `${API_URL}/audit`);
+      const domain = new URL(formData.websiteUrl).hostname;
       const response = await fetch(`${API_URL}/audit`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Access-Control-Allow-Origin': '*'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          websiteUrl: formData.websiteUrl,
-          email: formData.email,
-          name: formData.name
+          ...formData,
+          companyDomain: domain
         })
       });
 
-      const data = await response.json();
-      console.log('Response:', data);
-
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to start audit');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to start audit');
       }
 
+      const data = await response.json();
       if (data.success) {
         pollAuditStatus(data.auditId);
       } else {
@@ -121,12 +138,7 @@ const SEOAuditWidget: React.FC = () => {
 
   const pollAuditStatus = async (id: string) => {
     try {
-      const response = await fetch(`${API_URL}/audit/${id}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
-      });
+      const response = await fetch(`${API_URL}/audit/${id}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -148,6 +160,20 @@ const SEOAuditWidget: React.FC = () => {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to get audit status');
     }
   };
+
+  if (!isBackendUp) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-red-50 rounded-lg p-8 text-center">
+          <AlertCircle className="w-16 h-16 mx-auto text-red-500" />
+          <h2 className="mt-4 text-xl font-semibold text-red-700">Service Unavailable</h2>
+          <p className="mt-2 text-red-600">
+            The SEO audit service is currently unavailable. Please try again later.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">

@@ -37,6 +37,8 @@ interface AuditResults {
   };
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
+
 const SEOAuditWidget: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
     websiteUrl: '',
@@ -67,10 +69,7 @@ const SEOAuditWidget: React.FC = () => {
       newErrors.email = 'Please enter a valid email';
     }
 
-    return { 
-      isValid: Object.keys(newErrors).length === 0, 
-      errors: newErrors 
-    };
+    return { isValid: Object.keys(newErrors).length === 0, errors: newErrors };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,15 +85,23 @@ const SEOAuditWidget: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      const response = await fetch('https://seo-audit-backend.onrender.com/api/audit', {
+      console.log('Submitting to:', `${API_URL}/audit`);
+      const response = await fetch(`${API_URL}/audit`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Access-Control-Allow-Origin': '*'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          websiteUrl: formData.websiteUrl,
+          email: formData.email,
+          name: formData.name
+        })
       });
 
       const data = await response.json();
+      console.log('Response:', data);
 
       if (!response.ok) {
         throw new Error(data.message || 'Failed to start audit');
@@ -106,6 +113,7 @@ const SEOAuditWidget: React.FC = () => {
         throw new Error(data.message || 'Failed to start audit');
       }
     } catch (error) {
+      console.error('Audit error:', error);
       setAuditStatus('error');
       setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     }
@@ -113,7 +121,12 @@ const SEOAuditWidget: React.FC = () => {
 
   const pollAuditStatus = async (id: string) => {
     try {
-      const response = await fetch(`https://seo-audit-backend.onrender.com/api/audit/${id}`);
+      const response = await fetch(`${API_URL}/audit/${id}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -130,6 +143,7 @@ const SEOAuditWidget: React.FC = () => {
         setTimeout(() => pollAuditStatus(id), 2000);
       }
     } catch (error) {
+      console.error('Status polling error:', error);
       setAuditStatus('error');
       setErrorMessage(error instanceof Error ? error.message : 'Failed to get audit status');
     }

@@ -1,16 +1,10 @@
 [build]
   command = "npm run build"
   publish = ".next"
-  functions = "netlify/functions"
-
-[build.environment]
-  NEXT_PUBLIC_API_URL = "https://seo-audit-backend.onrender.com/api"
-  NODE_VERSION = "18.17.0"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[build.environment]
+  NEXT_PUBLIC_API_URL = "https://seo-audit-backend.onrender.com/api"
+  NODE_VERSION = "18.x"

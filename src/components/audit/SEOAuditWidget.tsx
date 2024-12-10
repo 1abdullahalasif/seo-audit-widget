@@ -38,6 +38,8 @@ interface AuditResults {
 }
 
 const API_URL = 'https://seo-audit-backend.onrender.com/api';
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000; // 2 seconds
 
 const SEOAuditWidget: React.FC = () => {
   const [isBackendUp, setIsBackendUp] = useState(true);
@@ -47,12 +49,15 @@ const SEOAuditWidget: React.FC = () => {
     name: ''
   });
   const [errors, setErrors] = useState<FormErrors>({});
-  const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'completed' | 'error'>('idle');
+  const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'retrying' | 'completed' | 'error'>('idle');
   const [results, setResults] = useState<AuditResults | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     checkBackendStatus();
+    const keepAliveInterval = setInterval(checkBackendStatus, 300000); // Every 5 minutes
+    return () => clearInterval(keepAliveInterval);
   }, []);
 
   const checkBackendStatus = async () => {
@@ -64,6 +69,8 @@ const SEOAuditWidget: React.FC = () => {
       setIsBackendUp(false);
     }
   };
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const validateForm = (): { isValid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
@@ -90,12 +97,6 @@ const SEOAuditWidget: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isBackendUp) {
-      setErrorMessage('Service is temporarily unavailable. Please try again later.');
-      setAuditStatus('error');
-      return;
-    }
-
     const { isValid, errors } = validateForm();
     if (!isValid) {
       setErrors(errors);
@@ -104,39 +105,50 @@ const SEOAuditWidget: React.FC = () => {
 
     setAuditStatus('loading');
     setErrorMessage(null);
+    setRetryCount(0);
 
-    try {
-      const domain = new URL(formData.websiteUrl).hostname;
-      const response = await fetch(`${API_URL}/audit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...formData,
-          companyDomain: domain
-        })
-      });
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) {
+          setAuditStatus('retrying');
+          await sleep(RETRY_DELAY);
+        }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to start audit');
+        const response = await fetch(`${API_URL}/audit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ...formData,
+            companyDomain: new URL(formData.websiteUrl).hostname
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to start audit');
+        }
+
+        if (data.success) {
+          setRetryCount(0);
+          pollAuditStatus(data.auditId);
+          return;
+        }
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed:`, error);
+        setRetryCount(attempt + 1);
+        
+        if (attempt === MAX_RETRIES - 1) {
+          setAuditStatus('error');
+          setErrorMessage('Service temporarily unavailable. Please try again in a few minutes.');
+        }
       }
-
-      const data = await response.json();
-      if (data.success) {
-        pollAuditStatus(data.auditId);
-      } else {
-        throw new Error(data.message || 'Failed to start audit');
-      }
-    } catch (error) {
-      console.error('Audit error:', error);
-      setAuditStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     }
   };
 
-  const pollAuditStatus = async (id: string) => {
+  const pollAuditStatus = async (id: string, pollAttempt = 0) => {
     try {
       const response = await fetch(`${API_URL}/audit/${id}`);
       const data = await response.json();
@@ -152,7 +164,11 @@ const SEOAuditWidget: React.FC = () => {
         setAuditStatus('error');
         setErrorMessage(data.audit.error || 'Audit failed');
       } else {
-        setTimeout(() => pollAuditStatus(id), 2000);
+        if (pollAttempt < 30) { // Limit polling to 1 minute (30 * 2 seconds)
+          setTimeout(() => pollAuditStatus(id, pollAttempt + 1), 2000);
+        } else {
+          throw new Error('Audit timed out');
+        }
       }
     } catch (error) {
       console.error('Status polling error:', error);
@@ -160,20 +176,6 @@ const SEOAuditWidget: React.FC = () => {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to get audit status');
     }
   };
-
-  if (!isBackendUp) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-red-50 rounded-lg p-8 text-center">
-          <AlertCircle className="w-16 h-16 mx-auto text-red-500" />
-          <h2 className="mt-4 text-xl font-semibold text-red-700">Service Unavailable</h2>
-          <p className="mt-2 text-red-600">
-            The SEO audit service is currently unavailable. Please try again later.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -272,10 +274,15 @@ const SEOAuditWidget: React.FC = () => {
           </form>
         )}
 
-        {auditStatus === 'loading' && (
+        {(auditStatus === 'loading' || auditStatus === 'retrying') && (
           <div className="text-center">
             <Clock className="w-16 h-16 mx-auto text-[#ff9270] animate-spin" />
-            <h2 className="mt-4 text-xl font-semibold">Analyzing Your Website</h2>
+            <h2 className="mt-4 text-xl font-semibold">
+              {auditStatus === 'retrying' 
+                ? `Retrying... (Attempt ${retryCount}/${MAX_RETRIES})`
+                : 'Analyzing Your Website'
+              }
+            </h2>
             <p className="mt-2 text-gray-600">This may take a few minutes...</p>
           </div>
         )}
@@ -337,6 +344,12 @@ const SEOAuditWidget: React.FC = () => {
             <p className="mt-2 text-red-600">
               {errorMessage || 'An error occurred while analyzing your website.'}
             </p>
+            <button
+              onClick={() => setAuditStatus('idle')}
+              className="mt-4 px-4 py-2 text-sm font-medium text-[#ff9270] hover:text-opacity-90"
+            >
+              Try Again
+            </button>
           </div>
         )}
       </div>

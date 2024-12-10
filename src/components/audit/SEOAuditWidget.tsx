@@ -1,6 +1,6 @@
 // src/components/audit/SEOAuditWidget.tsx
 import React, { useState, useEffect } from 'react';
-import { Search, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Search, CheckCircle, AlertCircle, Clock, Shield, Globe, Timer, Image } from 'lucide-react';
 
 interface FormData {
   websiteUrl: string;
@@ -14,32 +14,75 @@ interface FormErrors {
   name?: string;
 }
 
-interface AuditResults {
-  meta: {
-    title: {
-      content: string;
-      length: number;
-      status: string;
-    };
-    description: {
-      content: string;
-      length: number;
-      status: string;
-    };
-  };
-  seo: {
-    score: number;
-    issues: Array<{
-      type: string;
-      severity: string;
-      description: string;
-    }>;
+interface MetaTag {
+  content: string;
+  length: number;
+  status: string;
+}
+
+interface ImageData {
+  src: string;
+  alt: string;
+  hasAlt: boolean;
+  dimensions?: {
+    width: number;
+    height: number;
   };
 }
 
-const API_URL = 'https://seo-audit-backend.onrender.com/api';
+interface TechnicalData {
+  ssl: boolean;
+  headers: {
+    server: string;
+    contentType: string;
+    cacheControl: string;
+  };
+}
+
+interface RobotsTxtData {
+  exists: boolean;
+  hasSitemap: boolean;
+  content?: string;
+  error?: string;
+}
+
+interface SitemapData {
+  exists: boolean;
+  urlCount?: number;
+  error?: string;
+}
+
+interface PerformanceData {
+  loadTime: number;
+  domContentLoaded: number;
+  firstPaint: number;
+}
+
+interface SEOIssue {
+  type: string;
+  severity: 'critical' | 'warning' | 'info';
+  description: string;
+}
+
+interface AuditResults {
+  meta: {
+    title: MetaTag;
+    description: MetaTag;
+  };
+  images: ImageData[];
+  technical: TechnicalData;
+  robotsTxt: RobotsTxtData;
+  sitemap: SitemapData;
+  performance: PerformanceData;
+  seo: {
+    score: number;
+    issues: SEOIssue[];
+  };
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 2000; // 2 seconds
+const RETRY_DELAY = 2000;
 
 const SEOAuditWidget: React.FC = () => {
   const [isBackendUp, setIsBackendUp] = useState(true);
@@ -56,7 +99,7 @@ const SEOAuditWidget: React.FC = () => {
 
   useEffect(() => {
     checkBackendStatus();
-    const keepAliveInterval = setInterval(checkBackendStatus, 300000); // Every 5 minutes
+    const keepAliveInterval = setInterval(checkBackendStatus, 300000);
     return () => clearInterval(keepAliveInterval);
   }, []);
 
@@ -69,8 +112,6 @@ const SEOAuditWidget: React.FC = () => {
       setIsBackendUp(false);
     }
   };
-
-  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const validateForm = (): { isValid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
@@ -97,6 +138,12 @@ const SEOAuditWidget: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!isBackendUp) {
+      setErrorMessage('Service is temporarily unavailable. Please try again later.');
+      setAuditStatus('error');
+      return;
+    }
+
     const { isValid, errors } = validateForm();
     if (!isValid) {
       setErrors(errors);
@@ -111,7 +158,7 @@ const SEOAuditWidget: React.FC = () => {
       try {
         if (attempt > 0) {
           setAuditStatus('retrying');
-          await sleep(RETRY_DELAY);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         }
 
         const response = await fetch(`${API_URL}/audit`, {
@@ -164,7 +211,7 @@ const SEOAuditWidget: React.FC = () => {
         setAuditStatus('error');
         setErrorMessage(data.audit.error || 'Audit failed');
       } else {
-        if (pollAttempt < 30) { // Limit polling to 1 minute (30 * 2 seconds)
+        if (pollAttempt < 30) {
           setTimeout(() => pollAuditStatus(id, pollAttempt + 1), 2000);
         } else {
           throw new Error('Audit timed out');
@@ -288,73 +335,68 @@ const SEOAuditWidget: React.FC = () => {
         )}
 
         {auditStatus === 'completed' && results && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div className="flex items-center">
               <CheckCircle className="w-8 h-8 text-green-500 mr-3" />
               <h2 className="text-2xl font-bold">Audit Results</h2>
             </div>
 
+            {/* Overall Score */}
             <div className="bg-gray-50 rounded-lg p-6">
               <h3 className="text-lg font-semibold mb-4">SEO Score</h3>
-              <div className="text-5xl font-bold text-center">
+              <div className={`text-6xl font-bold text-center ${
+                results.seo.score >= 90 ? 'text-green-600' :
+                results.seo.score >= 70 ? 'text-yellow-600' :
+                'text-red-600'
+              }`}>
                 {results.seo.score}/100
               </div>
             </div>
 
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Issues Found</h3>
+            {/* Meta Tags */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Meta Tags</h3>
               <div className="space-y-4">
-                {results.seo.issues.map((issue, index) => (
-                  <div
-                    key={index}
-                    className={`p-4 rounded-lg ${
-                      issue.severity === 'critical'
-                        ? 'bg-red-50'
-                        : issue.severity === 'warning'
-                        ? 'bg-yellow-50'
-                        : 'bg-blue-50'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium">{issue.type}</span>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full ${
-                          issue.severity === 'critical'
-                            ? 'bg-red-100 text-red-800'
-                            : issue.severity === 'warning'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {issue.severity}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm text-gray-600">{issue.description}</p>
-                  </div>
-                ))}
+                <div>
+                  <p className="font-medium">Title Tag</p>
+                  <p className="text-sm text-gray-600">{results.meta.title.content || 'Missing'}</p>
+                  <p className={`text-sm mt-1 ${
+                    results.meta.title.status === 'good' ? 'text-green-600' : 'text-yellow-600'
+                  }`}>
+                    Length: {results.meta.title.length} characters 
+                    {results.meta.title.length < 50 ? ' (Too short)' : 
+                     results.meta.title.length > 60 ? ' (Too long)' : ' (Good)'}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">Meta Description</p>
+                  <p className="text-sm text-gray-600">{results.meta.description.content || 'Missing'}</p>
+                  <p className={`text-sm mt-1 ${
+                    results.meta.description.status === 'good' ? 'text-green-600' : 'text-yellow-600'
+                  }`}>
+                    Length: {results.meta.description.length} characters
+                    {results.meta.description.length < 120 ? ' (Too short)' : 
+                     results.meta.description.length > 160 ? ' (Too long)' : ' (Good)'}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {auditStatus === 'error' && (
-          <div className="text-center">
-            <AlertCircle className="w-16 h-16 mx-auto text-red-500" />
-            <h2 className="mt-4 text-xl font-semibold text-red-700">Error</h2>
-            <p className="mt-2 text-red-600">
-              {errorMessage || 'An error occurred while analyzing your website.'}
-            </p>
-            <button
-              onClick={() => setAuditStatus('idle')}
-              className="mt-4 px-4 py-2 text-sm font-medium text-[#ff9270] hover:text-opacity-90"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+            {/* Images Analysis */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Images</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="font-medium">Total Images</p>
+                  <p className="text-2xl">{results.images?.length || 0}</p>
+                </div>
+                <div>
+                  <p className="font-medium">Missing Alt Text</p>
+                  <p className="text-2xl text-yellow-600">
+                    {results.images?.filter(img => !img.hasAlt).length || 0}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-export default SEOAuditWidget;
+            {/* Technical

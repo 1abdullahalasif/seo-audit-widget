@@ -379,4 +379,48 @@ const SEOAuditWidget: React.FC = () => {
                     <div className="flex justify-between items-start">
                       <span className="font-medium">{issue.type}</span>
                       <span className={`text-xs px-2 py-1 rounded-full ${
-                        issue.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                        issue.severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {issue.severity}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-gray-600">{issue.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <div className="text-center">
+              <button
+                onClick={resetForm}
+                className="px-6 py-3 bg-[#ff9270] text-white rounded-md hover:bg-opacity-90"
+              >
+                Run Another Audit
+              </button>
+            </div>
+          </div>
+        )}
+
+        {auditStatus === 'error' && (
+          <div className="text-center">
+            <AlertCircle className="w-16 h-16 mx-auto text-red-500" />
+            <h2 className="mt-4 text-xl font-semibold text-red-700">Error</h2>
+            <p className="mt-2 text-red-600">
+              {errorMessage || 'An error occurred while analyzing your website.'}
+            </p>
+            <button
+              onClick={resetForm}
+              className="mt-4 px-6 py-2 text-[#ff9270] hover:text-opacity-90"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default SEOAuditWidget;

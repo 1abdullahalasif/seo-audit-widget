@@ -2,9 +2,14 @@
   command = "npm run build"
   publish = ".next"
 
+[build.environment]
+  NEXT_PUBLIC_API_URL = "https://seo-audit-backend.onrender.com/api"
+  NODE_VERSION = "18.17.0"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[build.environment]
-  NEXT_PUBLIC_API_URL = "https://seo-audit-backend.onrender.com/api"
-  NODE_VERSION = "18.17.0"  # Specific version instead of 18.x
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "ALLOWALL"

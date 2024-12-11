@@ -12,17 +12,6 @@ interface AuditResponse {
   auditId?: string;
 }
 
-interface AuditStatusResponse {
-  success: boolean;
-  audit: {
-    status: 'pending' | 'processing' | 'completed' | 'failed';
-    createdAt: string;
-    completedAt?: string;
-    results?: any;
-    error?: string;
-  };
-}
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
 
 export const auditService = {
@@ -52,7 +41,7 @@ export const auditService = {
     }
   },
 
-  getAuditStatus: async (id: string): Promise<AuditStatusResponse> => {
+  getAuditStatus: async (id: string) => {
     try {
       const response = await fetch(`${API_URL}/audit/${id}`);
 
@@ -61,7 +50,28 @@ export const auditService = {
         throw new Error(errorData.message || 'Failed to get audit status');
       }
 
-      return response.json();
+      const data = await response.json();
+      return {
+        ...data,
+        audit: {
+          ...data.audit,
+          results: data.audit.results || {
+            technical: { ssl: false },
+            meta: { 
+              title: { content: '', length: 0, status: 'error' },
+              description: { content: '', length: 0, status: 'error' }
+            },
+            seo: {
+              score: 0,
+              issues: []
+            },
+            images: [],
+            robotsTxt: { exists: false },
+            sitemap: { exists: false },
+            performance: { loadTime: 0, domContentLoaded: 0, firstPaint: 0 }
+          }
+        }
+      };
     } catch (error) {
       console.error('Get audit status error:', error);
       throw error instanceof Error ? error : new Error('Failed to get audit status');
@@ -70,7 +80,11 @@ export const auditService = {
 
   healthCheck: async (): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_URL}/health`);
+      const response = await fetch(`${API_URL}/health`, {
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
       return response.ok;
     } catch (error) {
       console.error('Health check error:', error);

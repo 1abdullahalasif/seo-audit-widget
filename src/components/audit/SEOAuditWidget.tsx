@@ -26,20 +26,9 @@ interface AuditResults {
     title: MetaTag;
     description: MetaTag;
   };
-  headings: {
-    [key: string]: Array<{
-      content: string;
-      length: number;
-    }>;
-  };
-  images: Array<{
-    src: string;
-    alt: string;
-    hasAlt: boolean;
-  }>;
   technical: {
     ssl: boolean;
-    headers: {
+    headers?: {
       server: string;
       contentType: string;
       cacheControl: string;
@@ -58,6 +47,11 @@ interface AuditResults {
     domContentLoaded: number;
     firstPaint: number;
   };
+  images: Array<{
+    src: string;
+    alt?: string;
+    hasAlt: boolean;
+  }>;
   seo: {
     score: number;
     issues: Array<{
@@ -67,9 +61,6 @@ interface AuditResults {
     }>;
   };
 }
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 2000;
 
 const SEOAuditWidget: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
@@ -97,35 +88,29 @@ const SEOAuditWidget: React.FC = () => {
   const validateForm = (): { isValid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
 
-    // Website URL validation
     if (!formData.websiteUrl) {
       newErrors.websiteUrl = 'Website URL is required';
     } else if (!formData.websiteUrl.match(/^https?:\/\/.+\..+/)) {
       newErrors.websiteUrl = 'Please enter a valid URL';
     }
 
-    // Name validation
     if (!formData.name) {
       newErrors.name = 'Name is required';
     }
 
-    // Email validation
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
 
-    return { 
-      isValid: Object.keys(newErrors).length === 0, 
-      errors: newErrors 
-    };
+    return { isValid: Object.keys(newErrors).length === 0, errors: newErrors };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const { isValid, errors } = validateForm();
+
     if (!isValid) {
       setErrors(errors);
       return;
@@ -142,6 +127,7 @@ const SEOAuditWidget: React.FC = () => {
         throw new Error('Failed to start audit');
       }
     } catch (error) {
+      console.error('Audit error:', error);
       setAuditStatus('error');
       setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     }
@@ -150,7 +136,7 @@ const SEOAuditWidget: React.FC = () => {
   const pollAuditStatus = async (id: string, attempt = 0) => {
     try {
       const response = await auditService.getAuditStatus(id);
-
+      
       if (response.audit.status === 'completed' && response.audit.results) {
         setAuditStatus('completed');
         setResults(response.audit.results);
@@ -169,11 +155,7 @@ const SEOAuditWidget: React.FC = () => {
   };
 
   const resetForm = () => {
-    setFormData({
-      websiteUrl: '',
-      email: '',
-      name: ''
-    });
+    setFormData({ websiteUrl: '', email: '', name: '' });
     setAuditStatus('idle');
     setResults(null);
     setErrorMessage(null);
@@ -292,7 +274,7 @@ const SEOAuditWidget: React.FC = () => {
               <h2 className="text-2xl font-bold">Audit Results</h2>
             </div>
 
-            {/* Overall Score */}
+            {/* SEO Score */}
             <div className="bg-gray-50 rounded-lg p-6">
               <h3 className="text-lg font-semibold mb-4">SEO Score</h3>
               <div className={`text-6xl font-bold text-center ${
@@ -305,91 +287,116 @@ const SEOAuditWidget: React.FC = () => {
             </div>
 
             {/* Meta Tags */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Meta Tags</h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="font-medium">Title Tag</p>
-                  <p className="text-sm text-gray-600">{results.meta.title.content || 'Missing'}</p>
-                  <p className={`text-sm mt-1 ${
-                    results.meta.title.status === 'good' ? 'text-green-600' : 'text-yellow-600'
-                  }`}>
-                    Length: {results.meta.title.length} characters 
-                    {results.meta.title.length < 50 ? ' (Too short)' : 
-                     results.meta.title.length > 60 ? ' (Too long)' : ' (Good)'}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium">Meta Description</p>
-                  <p className="text-sm text-gray-600">{results.meta.description.content || 'Missing'}</p>
-                  <p className={`text-sm mt-1 ${
-                    results.meta.description.status === 'good' ? 'text-green-600' : 'text-yellow-600'
-                  }`}>
-                    Length: {results.meta.description.length} characters
-                    {results.meta.description.length < 120 ? ' (Too short)' : 
-                     results.meta.description.length > 160 ? ' (Too long)' : ' (Good)'}
-                  </p>
+            {results.meta && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Meta Tags</h3>
+                <div className="space-y-4">
+                  <div>
+                    <p className="font-medium">Title Tag</p>
+                    <p className="text-sm text-gray-600">{results.meta.title.content || 'Missing'}</p>
+                    <p className={`text-sm mt-1 ${
+                      results.meta.title.status === 'good' ? 'text-green-600' : 'text-yellow-600'
+                    }`}>
+                      Length: {results.meta.title.length} characters 
+                      {results.meta.title.length < 50 ? ' (Too short)' : 
+                       results.meta.title.length > 60 ? ' (Too long)' : ' (Good)'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Meta Description</p>
+                    <p className="text-sm text-gray-600">{results.meta.description.content || 'Missing'}</p>
+                    <p className={`text-sm mt-1 ${
+                      results.meta.description.status === 'good' ? 'text-green-600' : 'text-yellow-600'
+                    }`}>
+                      Length: {results.meta.description.length} characters
+                      {results.meta.description.length < 120 ? ' (Too short)' : 
+                       results.meta.description.length > 160 ? ' (Too long)' : ' (Good)'}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Technical SEO */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Technical SEO</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="font-medium">SSL Security</p>
-                  <p className={`text-sm ${results.technical.ssl ? 'text-green-600' : 'text-red-600'}`}>
-                    {results.technical.ssl ? 'Secure' : 'Not Secure'}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium">Robots.txt</p>
-                  <p className={`text-sm ${results.robotsTxt.exists ? 'text-green-600' : 'text-yellow-600'}`}>
-                    {results.robotsTxt.exists ? 'Present' : 'Missing'}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium">Sitemap</p>
-                  <p className={`text-sm ${results.sitemap.exists ? 'text-green-600' : 'text-yellow-600'}`}>
-                    {results.sitemap.exists ? 'Present' : 'Missing'}
-                    {results.sitemap.urlCount && ` (${results.sitemap.urlCount} URLs)`}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium">Page Load Time</p>
-                  <p className="text-sm">{results.performance.loadTime}ms</p>
+            {results.technical && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Technical SEO</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-medium">SSL Security</p>
+                    <p className={`text-sm ${results.technical.ssl ? 'text-green-600' : 'text-red-600'}`}>
+                      {results.technical.ssl ? 'Secure' : 'Not Secure'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Robots.txt</p>
+                    <p className={`text-sm ${results.robotsTxt?.exists ? 'text-green-600' : 'text-yellow-600'}`}>
+                      {results.robotsTxt?.exists ? 'Present' : 'Missing'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Sitemap</p>
+                    <p className={`text-sm ${results.sitemap?.exists ? 'text-green-600' : 'text-yellow-600'}`}>
+                      {results.sitemap?.exists ? `Present${results.sitemap.urlCount ? ` (${results.sitemap.urlCount} URLs)` : ''}` : 'Missing'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Page Load Time</p>
+                    <p className="text-sm">{results.performance?.loadTime || 0}ms</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Images Analysis */}
+            {results.images && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Images</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-medium">Total Images</p>
+                    <p className="text-2xl">{results.images.length}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Missing Alt Text</p>
+                    <p className="text-2xl text-yellow-600">
+                      {results.images.filter(img => !img.hasAlt).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Issues */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Issues Found</h3>
-              <div className="space-y-4">
+            {results.seo.issues.length > 0 && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Issues Found</h3>
+                <div className="space-y-4">
                 {results.seo.issues.map((issue, index) => (
-                  <div
-                    key={index}
-                    className={`p-4 rounded-lg ${
-                      issue.severity === 'critical' ? 'bg-red-50' :
-                      issue.severity === 'warning' ? 'bg-yellow-50' :
-                      'bg-blue-50'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium">{issue.type}</span>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        issue.severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {issue.severity}
-                      </span>
+                    <div
+                      key={index}
+                      className={`p-4 rounded-lg ${
+                        issue.severity === 'critical' ? 'bg-red-50' :
+                        issue.severity === 'warning' ? 'bg-yellow-50' :
+                        'bg-blue-50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="font-medium">{issue.type}</span>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          issue.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                          issue.severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {issue.severity}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-600">{issue.description}</p>
                     </div>
-                    <p className="mt-2 text-sm text-gray-600">{issue.description}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Action Button */}
             <div className="text-center">
@@ -412,7 +419,7 @@ const SEOAuditWidget: React.FC = () => {
             </p>
             <button
               onClick={resetForm}
-              className="mt-4 px-6 py-2 text-[#ff9270] hover:text-opacity-90"
+              className="mt-4 px-6 py-2 text-[#ff9270] hover:text-opacity-90 rounded-md border border-[#ff9270]"
             >
               Try Again
             </button>

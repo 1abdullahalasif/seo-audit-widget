@@ -80,20 +80,25 @@ export const auditService = {
       
       // If audit is complete, fetch all detailed results
       if (data && data.audit && data.audit.status === 'completed') {
-        const [technical, onPage, offPage, analytics] = await Promise.all([
-          auditService.getTechnicalSEO(id),
-          auditService.getOnPageSEO(id),
-          auditService.getOffPageSEO(id),
-          auditService.getAnalytics(id)
-        ]);
+        try {
+          const [technical, onPage, offPage, analytics] = await Promise.all([
+            auditService.getTechnicalSEO(id),
+            auditService.getOnPageSEO(id),
+            auditService.getOffPageSEO(id),
+            auditService.getAnalytics(id)
+          ]);
 
-        data.audit.results = {
-          technical,
-          onPage,
-          offPage,
-          analytics,
-          recommendations: await auditService.getRecommendations(id)
-        };
+          data.audit.results = {
+            technical,
+            onPage,
+            offPage,
+            analytics,
+            recommendations: await auditService.getRecommendations(id)
+          };
+        } catch (error) {
+          console.error('Error fetching audit results:', error);
+          data.audit.error = 'Failed to fetch some audit data';
+        }
       }
 
       return data;

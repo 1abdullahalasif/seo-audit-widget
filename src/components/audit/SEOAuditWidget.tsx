@@ -1,7 +1,25 @@
 // src/components/audit/SEOAuditWidget.tsx
 import React, { useState, useEffect } from 'react';
 import { Search, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import ScoreCard from '@/components/audit/results/ScoreCard';
+import TechnicalSEOCard from './results/TechnicalSEOCard';
 import { auditService } from '@/services/auditService';
+import type { SEOAuditResults } from '@/types/seo';
+import { 
+  calculateTechnicalScore,
+  calculateOnPageScore,
+  calculateOffPageScore,
+  calculateAnalyticsScore,
+  calculateAdvancedScore,
+  calculateOverallScore 
+} from '@/utils/scoring';
+import { 
+  SCORE_THRESHOLDS,
+  AUDIT_WEIGHTS,
+  MAX_POLL_ATTEMPTS,
+  POLL_INTERVAL,
+  HEALTH_CHECK_INTERVAL 
+} from '@/utils/constants';
 
 interface FormData {
   websiteUrl: string;
@@ -15,53 +33,6 @@ interface FormErrors {
   name?: string;
 }
 
-interface MetaTag {
-  content: string;
-  length: number;
-  status: string;
-}
-
-interface AuditResults {
-  meta: {
-    title: MetaTag;
-    description: MetaTag;
-  };
-  technical: {
-    ssl: boolean;
-    headers?: {
-      server: string;
-      contentType: string;
-      cacheControl: string;
-    };
-  };
-  robotsTxt: {
-    exists: boolean;
-    hasSitemap: boolean;
-  };
-  sitemap: {
-    exists: boolean;
-    urlCount?: number;
-  };
-  performance: {
-    loadTime: number;
-    domContentLoaded: number;
-    firstPaint: number;
-  };
-  images: Array<{
-    src: string;
-    alt?: string;
-    hasAlt: boolean;
-  }>;
-  seo: {
-    score: number;
-    issues: Array<{
-      type: string;
-      severity: 'critical' | 'warning' | 'info';
-      description: string;
-    }>;
-  };
-}
-
 const SEOAuditWidget: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
     websiteUrl: '',
@@ -69,12 +40,15 @@ const SEOAuditWidget: React.FC = () => {
     name: ''
   });
   const [errors, setErrors] = useState<FormErrors>({});
-  const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'completed' | 'error'>('idle');
-  const [results, setResults] = useState<AuditResults | null>(null);
+  const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'retrying' | 'completed' | 'error'>('idle');
+  const [results, setResults] = useState<SEOAuditResults | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     checkBackendStatus();
+    const keepAliveInterval = setInterval(checkBackendStatus, HEALTH_CHECK_INTERVAL);
+    return () => clearInterval(keepAliveInterval);
   }, []);
 
   const checkBackendStatus = async () => {
@@ -94,17 +68,20 @@ const SEOAuditWidget: React.FC = () => {
       newErrors.websiteUrl = 'Please enter a valid URL';
     }
 
-    if (!formData.name) {
+    if (!formData.name?.trim()) {
       newErrors.name = 'Name is required';
     }
 
-    if (!formData.email) {
+    if (!formData.email?.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
 
-    return { isValid: Object.keys(newErrors).length === 0, errors: newErrors };
+    return { 
+      isValid: Object.keys(newErrors).length === 0, 
+      errors: newErrors 
+    };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -118,6 +95,7 @@ const SEOAuditWidget: React.FC = () => {
 
     setAuditStatus('loading');
     setErrorMessage(null);
+    setRetryCount(0);
 
     try {
       const response = await auditService.startAudit(formData);
@@ -133,25 +111,32 @@ const SEOAuditWidget: React.FC = () => {
     }
   };
 
-  const pollAuditStatus = async (id: string, attempt = 0) => {
+  const pollAuditStatus = async (id: string, pollAttempt = 0) => {
     try {
       const response = await auditService.getAuditStatus(id);
-      
+
       if (response.audit.status === 'completed' && response.audit.results) {
         setAuditStatus('completed');
         setResults(response.audit.results);
       } else if (response.audit.status === 'failed') {
         setAuditStatus('error');
         setErrorMessage(response.audit.error || 'Audit failed');
-      } else if (attempt < 30) { // Limit polling to 1 minute
-        setTimeout(() => pollAuditStatus(id, attempt + 1), 2000);
+      } else if (pollAttempt < MAX_POLL_ATTEMPTS) {
+        setTimeout(() => pollAuditStatus(id, pollAttempt + 1), POLL_INTERVAL);
       } else {
         throw new Error('Audit timed out');
       }
     } catch (error) {
+      console.error('Status polling error:', error);
       setAuditStatus('error');
       setErrorMessage(error instanceof Error ? error.message : 'Failed to get audit status');
     }
+  };
+
+  const getScoreColor = (score: number): string => {
+    if (score >= SCORE_THRESHOLDS.EXCELLENT) return 'text-green-600';
+    if (score >= SCORE_THRESHOLDS.GOOD) return 'text-yellow-600';
+    return 'text-red-600';
   };
 
   const resetForm = () => {
@@ -162,6 +147,7 @@ const SEOAuditWidget: React.FC = () => {
     setErrors({});
   };
 
+  // The component's JSX return
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="bg-white rounded-lg shadow-lg p-8">
@@ -269,131 +255,89 @@ const SEOAuditWidget: React.FC = () => {
 
         {auditStatus === 'completed' && results && (
           <div className="space-y-8">
-            <div className="flex items-center">
-              <CheckCircle className="w-8 h-8 text-green-500 mr-3" />
-              <h2 className="text-2xl font-bold">Audit Results</h2>
-            </div>
-
-            {/* SEO Score */}
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">SEO Score</h3>
-              <div className={`text-6xl font-bold text-center ${
-                results.seo.score >= 90 ? 'text-green-600' :
-                results.seo.score >= 70 ? 'text-yellow-600' :
-                'text-red-600'
-              }`}>
-                {results.seo.score}/100
-              </div>
-            </div>
-
-            {/* Meta Tags */}
-            {results.meta && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Meta Tags</h3>
-                <div className="space-y-4">
-                  <div>
-                    <p className="font-medium">Title Tag</p>
-                    <p className="text-sm text-gray-600">{results.meta.title.content || 'Missing'}</p>
-                    <p className={`text-sm mt-1 ${
-                      results.meta.title.status === 'good' ? 'text-green-600' : 'text-yellow-600'
-                    }`}>
-                      Length: {results.meta.title.length} characters 
-                      {results.meta.title.length < 50 ? ' (Too short)' : 
-                       results.meta.title.length > 60 ? ' (Too long)' : ' (Good)'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Meta Description</p>
-                    <p className="text-sm text-gray-600">{results.meta.description.content || 'Missing'}</p>
-                    <p className={`text-sm mt-1 ${
-                      results.meta.description.status === 'good' ? 'text-green-600' : 'text-yellow-600'
-                    }`}>
-                      Length: {results.meta.description.length} characters
-                      {results.meta.description.length < 120 ? ' (Too short)' : 
-                       results.meta.description.length > 160 ? ' (Too long)' : ' (Good)'}
-                    </p>
-                  </div>
+            {/* Overall Score */}
+            <div className="bg-white rounded-lg shadow-lg p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Overall SEO Score</h2>
+                <div className={`text-5xl font-bold ${getScoreColor(results.overallScore.score)}`}>
+                  {results.overallScore.score}/100
                 </div>
               </div>
-            )}
 
-            {/* Technical SEO */}
-            {results.technical && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Technical SEO</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-medium">SSL Security</p>
-                    <p className={`text-sm ${results.technical.ssl ? 'text-green-600' : 'text-red-600'}`}>
-                      {results.technical.ssl ? 'Secure' : 'Not Secure'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Robots.txt</p>
-                    <p className={`text-sm ${results.robotsTxt?.exists ? 'text-green-600' : 'text-yellow-600'}`}>
-                      {results.robotsTxt?.exists ? 'Present' : 'Missing'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Sitemap</p>
-                    <p className={`text-sm ${results.sitemap?.exists ? 'text-green-600' : 'text-yellow-600'}`}>
-                      {results.sitemap?.exists ? `Present${results.sitemap.urlCount ? ` (${results.sitemap.urlCount} URLs)` : ''}` : 'Missing'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Page Load Time</p>
-                    <p className="text-sm">{results.performance?.loadTime || 0}ms</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Images Analysis */}
-            {results.images && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Images</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-medium">Total Images</p>
-                    <p className="text-2xl">{results.images.length}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Missing Alt Text</p>
-                    <p className="text-2xl text-yellow-600">
-                      {results.images.filter(img => !img.hasAlt).length}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Issues */}
-            {results.seo.issues.length > 0 && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Issues Found</h3>
-                <div className="space-y-4">
-                {results.seo.issues.map((issue, index) => (
-                    <div
-                      key={index}
-                      className={`p-4 rounded-lg ${
-                        issue.severity === 'critical' ? 'bg-red-50' :
-                        issue.severity === 'warning' ? 'bg-yellow-50' :
-                        'bg-blue-50'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <span className="font-medium">{issue.type}</span>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          issue.severity === 'critical' ? 'bg-red-100 text-red-800' :
-                          issue.severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          {issue.severity}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm text-gray-600">{issue.description}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {Object.entries(results.overallScore.breakdown).map(([category, score]) => (
+                  <div key={category} className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-sm font-medium text-gray-500 capitalize">
+                      {category.replace(/([A-Z])/g, ' $1').trim()}
                     </div>
-                  ))}
+                    <div className={`text-2xl font-bold ${getScoreColor(score)}`}>
+                      {score}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Score Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <ScoreCard
+                title="Technical SEO"
+                {...calculateTechnicalScore(results.technical)}
+              />
+
+              {/* TechnicalSEOCard component */}
+              <TechnicalSEOCard technicalSEO={results.technical} />
+
+              <ScoreCard
+                title="On-Page SEO"
+                {...calculateOnPageScore(results.onPage)}
+              />
+
+              <ScoreCard
+                title="Off-Page SEO"
+                {...calculateOffPageScore(results.offPage)}
+              />
+
+              <ScoreCard
+                title="Analytics & Tracking"
+                {...calculateAnalyticsScore(results.analytics)}
+              />
+
+              <ScoreCard
+                title="Advanced SEO"
+                {...calculateAdvancedScore(results.advanced)}
+              />
+            </div>
+
+            {/* Issues and Recommendations */}
+            {results.recommendations.length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-8">
+                <h3 className="text-xl font-bold mb-6">Critical Issues & Recommendations</h3>
+                <div className="space-y-4">
+                  {results.recommendations
+                    .sort((a, b) => b.priority - a.priority)
+                    .map((rec, index) => (
+                      <div key={index} className={`p-4 rounded-lg ${
+                        rec.category === 'critical' ? 'bg-red-50' :
+                        rec.category === 'important' ? 'bg-yellow-50' :
+                        'bg-blue-50'
+                      }`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-medium">{rec.issue}</h4>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            rec.category === 'critical' ? 'bg-red-100 text-red-800' :
+                            rec.category === 'important' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {rec.category}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">Impact: {rec.impact}</p>
+                        <p className="text-sm text-gray-800">
+                          Recommendation: {rec.recommendation}
+                        </p>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}

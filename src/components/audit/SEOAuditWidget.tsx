@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import ScoreCard from './results/ScoreCard';
 import TechnicalSEOCard from './results/TechnicalSEOCard';
-import { auditService } from '../services/auditService';
+import { auditService } from 'src/services/auditService';
 import type { SEOAuditResults } from '@/types/seo';
 import { 
   calculateTechnicalScore,
@@ -12,14 +12,14 @@ import {
   calculateAnalyticsScore,
   calculateAdvancedScore,
   calculateOverallScore 
-} from '@/utils/scoring';
+} from 'src/utils/scoring';
 import { 
   SCORE_THRESHOLDS,
   AUDIT_WEIGHTS,
   MAX_POLL_ATTEMPTS,
   POLL_INTERVAL,
   HEALTH_CHECK_INTERVAL 
-} from '@/utils/constants';
+} from 'src/utils/constants';
 
 interface FormData {
   websiteUrl: string;

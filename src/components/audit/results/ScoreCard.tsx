@@ -1,6 +1,6 @@
 // src/components/audit/results/ScoreCard.tsx
 import React from 'react';
-import type { ScoreItem } from '../../types/ScoreItems';
+import type { ScoreItem } from 'src/types/ScoreItem';
 
 interface ScoreCardProps {
   title: string;

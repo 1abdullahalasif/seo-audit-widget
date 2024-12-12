@@ -1,6 +1,6 @@
 // src/utils/scoring.ts
 import type { SEOAuditResults } from '@/types/seo';
-import type { ScoreBreakdown, ScoreItem } from '@/types/ScoreItems';
+import type { ScoreBreakdown, ScoreItem } from '@/types/ScoreItem';
 
 const calculateCategoryScore = (items: ScoreItem[]): ScoreBreakdown => {
   const totalScore = items.reduce((sum, item) => sum + item.score, 0);

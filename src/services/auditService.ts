@@ -81,11 +81,12 @@ export const auditService = {
       // If audit is complete, fetch all detailed results
       if (data && data.audit && data.audit.status === 'completed') {
         try {
-          const [technical, onPage, offPage, analytics] = await Promise.all([
+          const [technical, onPage, offPage, analytics, recommendations] = await Promise.all([
             auditService.getTechnicalSEO(id),
             auditService.getOnPageSEO(id),
             auditService.getOffPageSEO(id),
-            auditService.getAnalytics(id)
+            auditService.getAnalytics(id),
+            auditService.getRecommendations(id)
           ]);
 
           data.audit.results = {
@@ -93,7 +94,7 @@ export const auditService = {
             onPage,
             offPage,
             analytics,
-            recommendations: await auditService.getRecommendations(id)
+            recommendations
           };
         } catch (error) {
           console.error('Error fetching audit results:', error);
@@ -115,7 +116,7 @@ export const auditService = {
       return response.json();
     } catch (error) {
       console.error('Get technical SEO error:', error);
-      throw error;
+      return {}; // Return an empty object as fallback data
     }
   },
 
@@ -126,7 +127,7 @@ export const auditService = {
       return response.json();
     } catch (error) {
       console.error('Get on-page SEO error:', error);
-      throw error;
+      return {}; // Return an empty object as fallback data
     }
   },
 
@@ -137,7 +138,7 @@ export const auditService = {
       return response.json();
     } catch (error) {
       console.error('Get off-page SEO error:', error);
-      throw error;
+      return {}; // Return an empty object as fallback data
     }
   },
 
@@ -148,7 +149,7 @@ export const auditService = {
       return response.json();
     } catch (error) {
       console.error('Get analytics error:', error);
-      throw error;
+      return {}; // Return an empty object as fallback data
     }
   },
 
@@ -159,7 +160,7 @@ export const auditService = {
       return response.json();
     } catch (error) {
       console.error('Get recommendations error:', error);
-      throw error;
+      return []; // Return an empty array as fallback data
     }
   },
 

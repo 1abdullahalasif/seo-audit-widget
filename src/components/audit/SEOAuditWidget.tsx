@@ -285,8 +285,8 @@ const SEOAuditWidget: React.FC = () => {
                 {...calculateTechnicalScore(results.technical)}
               />
 
-              {/* TechnicalSEOCard component */}
-              <TechnicalSEOCard technicalSEO={results.technical} />
+    
+              <TechnicalSEOCard data={results.technical} />
 
               <ScoreCard
                 title="On-Page SEO"

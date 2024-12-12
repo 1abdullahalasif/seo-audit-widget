@@ -1,7 +1,7 @@
 // src/components/audit/SEOAuditWidget.tsx
 import React, { useState, useEffect } from 'react';
 import { Search, CheckCircle, AlertCircle, Clock } from 'lucide-react';
-import ScoreCard from '@/components/audit/results/ScoreCard';
+import ScoreCard from './results/ScoreCard';
 import TechnicalSEOCard from './results/TechnicalSEOCard';
 import { auditService } from '@/services/auditService';
 import type { SEOAuditResults } from '@/types/seo';

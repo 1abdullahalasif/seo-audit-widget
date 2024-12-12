@@ -1,13 +1,6 @@
 // src/components/audit/results/ScoreCard.tsx
 import React from 'react';
-
-interface ScoreItem {
-  name: string;
-  status: 'pass' | 'fail' | 'warning';
-  score: number;
-  maxScore: number;
-  details?: string;
-}
+import type { ScoreItem } from '@/types/ScoreItems';
 
 interface ScoreCardProps {
   title: string;
@@ -17,7 +10,7 @@ interface ScoreCardProps {
   className?: string;
 }
 
-export const ScoreCard: React.FC<ScoreCardProps> = ({ 
+const ScoreCard: React.FC<ScoreCardProps> = ({ 
   title, 
   score, 
   maxScore, 

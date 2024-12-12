@@ -79,12 +79,12 @@ export const auditService = {
       const data = await response.json();
       
       // If audit is complete, fetch all detailed results
-      if (data.audit.status === 'completed') {
+      if (data && data.audit && data.audit.status === 'completed') {
         const [technical, onPage, offPage, analytics] = await Promise.all([
-          this.getTechnicalSEO(id),
-          this.getOnPageSEO(id),
-          this.getOffPageSEO(id),
-          this.getAnalytics(id)
+          auditService.getTechnicalSEO(id),
+          auditService.getOnPageSEO(id),
+          auditService.getOffPageSEO(id),
+          auditService.getAnalytics(id)
         ]);
 
         data.audit.results = {
@@ -92,7 +92,7 @@ export const auditService = {
           onPage,
           offPage,
           analytics,
-          recommendations: await this.getRecommendations(id)
+          recommendations: await auditService.getRecommendations(id)
         };
       }
 

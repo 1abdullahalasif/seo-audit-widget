@@ -1,6 +1,7 @@
 // pages/index.tsx
 import Head from 'next/head';
 import SEOAuditWidget from '../components/audit/SEOAuditWidget';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 export default function Home() {
   return (
@@ -36,7 +37,9 @@ export default function Home() {
 
             {/* Audit Widget */}
             <div className="px-4 sm:px-0">
-              <SEOAuditWidget />
+              <ErrorBoundary>
+                <SEOAuditWidget />
+              </ErrorBoundary>
             </div>
 
             {/* Benefits Section */}

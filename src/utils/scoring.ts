@@ -1,6 +1,23 @@
 // src/utils/scoring.ts
 import type { SEOAuditResults, ScoreBreakdown } from '@/types/seo';
 
+const calculateCategoryScore = (items: {
+  name: string;
+  status: 'pass' | 'warning' | 'fail';
+  score: number;
+  maxScore: number;
+  details?: string;
+}[]): ScoreBreakdown => {
+  const totalScore = items.reduce((sum, item) => sum + item.score, 0);
+  const maxScore = items.reduce((sum, item) => sum + item.maxScore, 0);
+
+  return {
+    score: totalScore,
+    maxScore,
+    items
+  };
+};
+
 export const calculateTechnicalScore = (results: SEOAuditResults['technical']): ScoreBreakdown => {
   const items = [
     {
@@ -31,21 +48,15 @@ export const calculateTechnicalScore = (results: SEOAuditResults['technical']): 
     },
     {
       name: 'Core Web Vitals',
-      status: results.performance.coreWebVitals.status as 'pass' | 'warning' | 'fail',
+      status: results.performance.coreWebVitals.status === 'good' ? 'pass' : 
+              results.performance.coreWebVitals.status === 'needs-improvement' ? 'warning' : 'fail',
       score: results.performance.coreWebVitals.status === 'good' ? 15 : 
              results.performance.coreWebVitals.status === 'needs-improvement' ? 7 : 0,
       maxScore: 15
     }
   ];
 
-  const totalScore = items.reduce((sum, item) => sum + item.score, 0);
-  const maxScore = items.reduce((sum, item) => sum + item.maxScore, 0);
-
-  return {
-    score: totalScore,
-    maxScore,
-    items
-  };
+  return calculateCategoryScore(items);
 };
 
 export const calculateOnPageScore = (results: SEOAuditResults['onPage']): ScoreBreakdown => {
@@ -84,14 +95,7 @@ export const calculateOnPageScore = (results: SEOAuditResults['onPage']): ScoreB
     }
   ];
 
-  const totalScore = items.reduce((sum, item) => sum + item.score, 0);
-  const maxScore = items.reduce((sum, item) => sum + item.maxScore, 0);
-
-  return {
-    score: totalScore,
-    maxScore,
-    items
-  };
+  return calculateCategoryScore(items);
 };
 
 export const calculateAnalyticsScore = (results: SEOAuditResults['analytics']): ScoreBreakdown => {
@@ -122,10 +126,7 @@ export const calculateAnalyticsScore = (results: SEOAuditResults['analytics']): 
     }
   ];
 
-  const totalScore = items.reduce((sum, item) => sum + item.score, 0);
-  const maxScore = items.reduce((sum, item) => sum + item.maxScore, 0);
-
-  return { score: totalScore, maxScore, items };
+  return calculateCategoryScore(items);
 };
 
 export const calculateAdvancedScore = (results: SEOAuditResults['advanced']): ScoreBreakdown => {
@@ -156,10 +157,7 @@ export const calculateAdvancedScore = (results: SEOAuditResults['advanced']): Sc
     }
   ];
 
-  const totalScore = items.reduce((sum, item) => sum + item.score, 0);
-  const maxScore = items.reduce((sum, item) => sum + item.maxScore, 0);
-
-  return { score: totalScore, maxScore, items };
+  return calculateCategoryScore(items);
 };
 
 export const calculateOffPageScore = (results: SEOAuditResults['offPage']): ScoreBreakdown => {
@@ -178,14 +176,7 @@ export const calculateOffPageScore = (results: SEOAuditResults['offPage']): Scor
     }
   ];
 
-  const totalScore = items.reduce((sum, item) => sum + item.score, 0);
-  const maxScore = items.reduce((sum, item) => sum + item.maxScore, 0);
-
-  return {
-    score: totalScore,
-    maxScore,
-    items
-  };
+  return calculateCategoryScore(items);
 };
 
 export const calculateOverallScore = (results: SEOAuditResults) => {

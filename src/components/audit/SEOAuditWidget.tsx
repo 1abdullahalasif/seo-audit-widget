@@ -21,6 +21,14 @@ import {
   HEALTH_CHECK_INTERVAL 
 } from 'src/utils/constants';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
+
+const API_ENDPOINTS = {
+  audit: `${API_URL}/audit`,
+  status: (id: string) => `${API_URL}/audit/${id}`,
+  health: `${API_URL}/health`,
+};
+
 interface FormData {
   websiteUrl: string;
   email: string;
@@ -102,7 +110,7 @@ const SEOAuditWidget: React.FC = () => {
       if (response.success && response.auditId) {
         pollAuditStatus(response.auditId);
       } else {
-        throw new Error('Failed to start audit');
+        throw new Error(response.message || 'Failed to start audit');
       }
     } catch (error) {
       console.error('Audit error:', error);
@@ -285,7 +293,6 @@ const SEOAuditWidget: React.FC = () => {
                 {...calculateTechnicalScore(results.technical)}
               />
 
-    
               <TechnicalSEOCard data={results.technical} />
 
               <ScoreCard

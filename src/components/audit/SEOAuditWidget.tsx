@@ -114,6 +114,7 @@ const SEOAuditWidget: React.FC = () => {
       }
     } catch (error) {
       console.error('Audit error:', error);
+      console.error('Error response:', error.response);
       setAuditStatus('error');
       setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     }

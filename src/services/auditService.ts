@@ -13,27 +13,40 @@ interface AuditResponse {
   message?: string;
 }
 
-// Ensure trailing slash is removed from API URL
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api').replace(/\/$/, '');
+// Base API URL configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
+const API_URL = API_BASE_URL.replace(/\/+$/, ''); // Remove trailing slashes
 
 const API_ENDPOINTS = {
-  audit: `${API_URL}/audit`,
-  status: (id: string) => `${API_URL}/audit/${id}`,
+  audit: `${API_URL}/api/audit`,
+  status: (id: string) => `${API_URL}/api/audit/${id}`,
   health: `${API_URL}/health`,
-  details: (id: string) => `${API_URL}/audit/${id}/details`,
-  recommendations: (id: string) => `${API_URL}/audit/${id}/recommendations`,
-  technicalSEO: (id: string) => `${API_URL}/audit/${id}/technical`,
-  onPageSEO: (id: string) => `${API_URL}/audit/${id}/onpage`,
-  offPageSEO: (id: string) => `${API_URL}/audit/${id}/offpage`,
-  analytics: (id: string) => `${API_URL}/audit/${id}/analytics`
+  details: (id: string) => `${API_URL}/api/audit/${id}/details`,
+  recommendations: (id: string) => `${API_URL}/api/audit/${id}/recommendations`,
+  technicalSEO: (id: string) => `${API_URL}/api/audit/${id}/technical`,
+  onPageSEO: (id: string) => `${API_URL}/api/audit/${id}/onpage`,
+  offPageSEO: (id: string) => `${API_URL}/api/audit/${id}/offpage`,
+  analytics: (id: string) => `${API_URL}/api/audit/${id}/analytics`
 };
 
+// Response handler with improved error handling
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Network response was not ok' }));
+    const errorData = await response.json().catch(() => ({ 
+      message: 'Network response was not ok',
+      status: response.status 
+    }));
     throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
   }
   return response.json();
+};
+
+// Common fetch configuration
+const commonFetchConfig = {
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  }
 };
 
 export const auditService = {
@@ -42,14 +55,8 @@ export const auditService = {
       console.log('Starting audit with URL:', API_ENDPOINTS.audit);
       const response = await fetch(API_ENDPOINTS.audit, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          companyDomain: new URL(formData.websiteUrl).hostname
-        })
+        ...commonFetchConfig,
+        body: JSON.stringify(formData)
       });
 
       return handleResponse(response);
@@ -69,12 +76,7 @@ export const auditService = {
   }> => {
     try {
       console.log('Checking audit status:', API_ENDPOINTS.status(id));
-      const response = await fetch(API_ENDPOINTS.status(id), {
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
-
+      const response = await fetch(API_ENDPOINTS.status(id), commonFetchConfig);
       const data = await handleResponse(response);
       
       if (data?.audit?.status === 'completed') {
@@ -109,17 +111,17 @@ export const auditService = {
 
   getTechnicalSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.technicalSEO(id));
+      const response = await fetch(API_ENDPOINTS.technicalSEO(id), commonFetchConfig);
       return handleResponse(response);
     } catch (error) {
       console.error('Get technical SEO error:', error);
-      return {}; 
+      return {};
     }
   },
 
   getOnPageSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.onPageSEO(id));
+      const response = await fetch(API_ENDPOINTS.onPageSEO(id), commonFetchConfig);
       return handleResponse(response);
     } catch (error) {
       console.error('Get on-page SEO error:', error);
@@ -129,7 +131,7 @@ export const auditService = {
 
   getOffPageSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.offPageSEO(id));
+      const response = await fetch(API_ENDPOINTS.offPageSEO(id), commonFetchConfig);
       return handleResponse(response);
     } catch (error) {
       console.error('Get off-page SEO error:', error);
@@ -139,7 +141,7 @@ export const auditService = {
 
   getAnalytics: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.analytics(id));
+      const response = await fetch(API_ENDPOINTS.analytics(id), commonFetchConfig);
       return handleResponse(response);
     } catch (error) {
       console.error('Get analytics error:', error);
@@ -149,7 +151,7 @@ export const auditService = {
 
   getRecommendations: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.recommendations(id));
+      const response = await fetch(API_ENDPOINTS.recommendations(id), commonFetchConfig);
       return handleResponse(response);
     } catch (error) {
       console.error('Get recommendations error:', error);
@@ -160,11 +162,7 @@ export const auditService = {
   healthCheck: async (): Promise<boolean> => {
     try {
       console.log('Checking health at:', API_ENDPOINTS.health);
-      const response = await fetch(API_ENDPOINTS.health, {
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
+      const response = await fetch(API_ENDPOINTS.health, commonFetchConfig);
       return response.ok;
     } catch (error) {
       console.error('Health check error:', error);

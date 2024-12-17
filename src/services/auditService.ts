@@ -14,7 +14,7 @@ interface AuditResponse {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com';
-const API_URL = API_BASE_URL.replace(/\/+$/, ''); // Remove trailing slashes
+const API_URL = API_BASE_URL.replace(/\/+$/, '');
 
 const API_ENDPOINTS = {
   audit: `${API_URL}/api/audit`,
@@ -30,13 +30,17 @@ const API_ENDPOINTS = {
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ 
-      message: 'Network response was not ok',
-      status: response.status 
-    }));
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    let errorMessage = `HTTP error! status: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorMessage;
+    } catch (e) {
+      console.error('Error parsing error response:', e);
+    }
+    throw new Error(errorMessage);
   }
-  return response.json();
+  const data = await response.json();
+  return data;
 };
 
 const commonFetchConfig = {
@@ -87,11 +91,11 @@ export const auditService = {
           ]);
 
           data.audit.results = {
-            technical,
-            onPage,
-            offPage,
-            analytics,
-            recommendations
+            technical: technical || {},
+            onPage: onPage || {},
+            offPage: offPage || {},
+            analytics: analytics || {},
+            recommendations: recommendations || []
           };
         } catch (error) {
           console.error('Error fetching audit results:', error);
@@ -112,7 +116,7 @@ export const auditService = {
       return handleResponse(response);
     } catch (error) {
       console.error('Get technical SEO error:', error);
-      return {};
+      return {}; 
     }
   },
 

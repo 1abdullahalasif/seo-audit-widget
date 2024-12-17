@@ -258,7 +258,6 @@ const SEOAuditWidget: React.FC = () => {
           <div className="space-y-8">
             {/* Overall Score Section */}
             <div className="bg-white rounded-lg shadow-lg p-8">
-              {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Overall SEO Score</h2>
                 <div className={`text-5xl font-bold ${getScoreColor(results.overallScore.score)}`}>
@@ -266,7 +265,6 @@ const SEOAuditWidget: React.FC = () => {
                 </div>
               </div>
 
-              {/* Score Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {Object.entries(results.overallScore.breakdown).map(([category, score]) => (
                   <div key={category} className="bg-gray-50 rounded-lg p-4">
@@ -317,7 +315,13 @@ const SEOAuditWidget: React.FC = () => {
                 <h3 className="text-xl font-bold mb-6">Critical Issues & Recommendations</h3>
                 <div className="space-y-4">
                   {results.summary.recommendations
-                    .sort((a, b) => b.priority - a.priority)
+                    .sort((a, b) => {
+                      if (typeof a.priority === 'number' && typeof b.priority === 'number') {
+                        return b.priority - a.priority;
+                      }
+                      const severityOrder = { critical: 3, warning: 2, info: 1 };
+                      return severityOrder[b.severity] - severityOrder[a.severity];
+                    })
                     .map((rec, index) => (
                       <div key={index} className={`p-4 rounded-lg ${
                         rec.severity === 'critical' ? 'bg-red-50' :
@@ -371,7 +375,7 @@ const SEOAuditWidget: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
+        </div>
     </div>
   );
 };

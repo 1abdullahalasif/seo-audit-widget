@@ -13,8 +13,7 @@ interface AuditResponse {
   message?: string;
 }
 
-// Base API URL configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com';
 const API_URL = API_BASE_URL.replace(/\/+$/, ''); // Remove trailing slashes
 
 const API_ENDPOINTS = {
@@ -29,7 +28,6 @@ const API_ENDPOINTS = {
   analytics: (id: string) => `${API_URL}/api/audit/${id}/analytics`
 };
 
-// Response handler with improved error handling
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ 
@@ -41,7 +39,6 @@ const handleResponse = async (response: Response) => {
   return response.json();
 };
 
-// Common fetch configuration
 const commonFetchConfig = {
   headers: {
     'Content-Type': 'application/json',

@@ -3,7 +3,7 @@
   publish = ".next"
 
 [build.environment]
-  NEXT_PUBLIC_API_URL = "https://seo-audit-backend.onrender.com/api"
+  NEXT_PUBLIC_API_URL = "https://seo-audit-backend.onrender.com"
   NODE_VERSION = "18.17.0"
 
 [[plugins]]
@@ -14,8 +14,3 @@
   [headers.values]
     X-Frame-Options = "ALLOWALL"
     Access-Control-Allow-Origin = "*"
-
-# Uncomment and modify if you need function configurations
-# [functions]
-#   directory = "netlify/functions"
-#   node_bundler = "esbuild"

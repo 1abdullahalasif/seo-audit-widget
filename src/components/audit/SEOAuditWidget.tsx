@@ -1,6 +1,6 @@
 // src/components/audit/SEOAuditWidget.tsx
 import React, { useState, useEffect } from 'react';
-import { Search, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Search, AlertCircle, Clock } from 'lucide-react';
 import ScoreCard from './results/ScoreCard';
 import TechnicalSEOCard from './results/TechnicalSEOCard';
 import { auditService } from 'src/services/auditService';
@@ -10,12 +10,10 @@ import {
   calculateOnPageScore,
   calculateOffPageScore,
   calculateAnalyticsScore,
-  calculateAdvancedScore,
-  calculateOverallScore 
+  calculateAdvancedScore
 } from 'src/utils/scoring';
 import { 
   SCORE_THRESHOLDS,
-  AUDIT_WEIGHTS,
   MAX_POLL_ATTEMPTS,
   POLL_INTERVAL,
   HEALTH_CHECK_INTERVAL 
@@ -31,13 +29,6 @@ interface FormErrors {
   websiteUrl?: string;
   email?: string;
   name?: string;
-}
-
-interface ApiError extends Error {
-  response?: {
-    status?: number;
-    data?: any;
-  };
 }
 
 const SEOAuditWidget: React.FC = () => {
@@ -265,8 +256,9 @@ const SEOAuditWidget: React.FC = () => {
 
         {auditStatus === 'completed' && results && (
           <div className="space-y-8">
-            {/* Overall Score */}
+            {/* Overall Score Section */}
             <div className="bg-white rounded-lg shadow-lg p-8">
+              {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Overall SEO Score</h2>
                 <div className={`text-5xl font-bold ${getScoreColor(results.overallScore.score)}`}>
@@ -274,6 +266,7 @@ const SEOAuditWidget: React.FC = () => {
                 </div>
               </div>
 
+              {/* Score Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {Object.entries(results.overallScore.breakdown).map(([category, score]) => (
                   <div key={category} className="bg-gray-50 rounded-lg p-4">
@@ -318,40 +311,38 @@ const SEOAuditWidget: React.FC = () => {
               />
             </div>
 
-            // In your SEOAuditWidget.tsx file, update the recommendations section:
-
-{/* Issues and Recommendations */}
-{results.summary?.recommendations && results.summary.recommendations.length > 0 && (
-  <div className="bg-white rounded-lg shadow-lg p-8">
-    <h3 className="text-xl font-bold mb-6">Critical Issues & Recommendations</h3>
-    <div className="space-y-4">
-      {results.summary.recommendations
-        .sort((a, b) => b.priority - a.priority)
-        .map((rec, index) => (
-          <div key={index} className={`p-4 rounded-lg ${
-            rec.severity === 'critical' ? 'bg-red-50' :
-            rec.severity === 'warning' ? 'bg-yellow-50' :
-            'bg-blue-50'
-          }`}>
-            <div className="flex justify-between items-start mb-2">
-              <h4 className="font-medium">{rec.description}</h4>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                rec.severity === 'critical' ? 'bg-red-100 text-red-800' :
-                rec.severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-blue-100 text-blue-800'
-              }`}>
-                {rec.severity}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 mb-2">Impact: {rec.impact}</p>
-            <p className="text-sm text-gray-800">
-              Recommendation: {rec.howToFix}
-            </p>
-          </div>
-        ))}
-    </div>
-  </div>
-)}
+            {/* Recommendations Section */}
+            {results.summary?.recommendations && results.summary.recommendations.length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-8">
+                <h3 className="text-xl font-bold mb-6">Critical Issues & Recommendations</h3>
+                <div className="space-y-4">
+                  {results.summary.recommendations
+                    .sort((a, b) => b.priority - a.priority)
+                    .map((rec, index) => (
+                      <div key={index} className={`p-4 rounded-lg ${
+                        rec.severity === 'critical' ? 'bg-red-50' :
+                        rec.severity === 'warning' ? 'bg-yellow-50' :
+                        'bg-blue-50'
+                      }`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-medium">{rec.description}</h4>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            rec.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                            rec.severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {rec.severity}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">Impact: {rec.impact}</p>
+                        <p className="text-sm text-gray-800">
+                          Recommendation: {rec.howToFix}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Action Button */}
             <div className="text-center">

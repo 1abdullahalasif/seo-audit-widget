@@ -14,8 +14,8 @@ export const TechnicalSEOCard: React.FC<TechnicalSEOCardProps> = ({ data }) => {
       {/* SSL Section */}
       <div className="mb-4">
         <h4 className="font-medium">SSL Security</h4>
-        <div className={`text-sm ${data.security.ssl.isValid ? 'text-green-600' : 'text-red-600'}`}>
-          {data.security.ssl.isValid ? 'Secure' : 'Not Secure'}
+        <div className={`text-sm ${data?.security?.ssl?.isValid ? 'text-green-600' : 'text-red-600'}`}>
+          {data.security?.ssl?.isValid ? 'Secure' : 'Not Secure'}
         </div>
       </div>
 

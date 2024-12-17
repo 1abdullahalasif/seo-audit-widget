@@ -80,10 +80,10 @@ export interface SEOAuditResults {
     ssl: boolean;
     redirects: number;
     security?: {
-      ssl: {
+      ssl?: {
         exists: boolean;
         isValid: boolean;
-        expiryDate: string;
+        expiryDate?: string;
         issues: string[];
       };
       httpToHttps: boolean;

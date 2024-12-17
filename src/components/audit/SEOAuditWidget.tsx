@@ -21,14 +21,6 @@ import {
   HEALTH_CHECK_INTERVAL 
 } from 'src/utils/constants';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
-
-const API_ENDPOINTS = {
-  audit: `${API_URL}/audit`,
-  status: (id: string) => `${API_URL}/audit/${id}`,
-  health: `${API_URL}/health`,
-};
-
 interface FormData {
   websiteUrl: string;
   email: string;
@@ -39,6 +31,13 @@ interface FormErrors {
   websiteUrl?: string;
   email?: string;
   name?: string;
+}
+
+interface ApiError extends Error {
+  response?: {
+    status?: number;
+    data?: any;
+  };
 }
 
 const SEOAuditWidget: React.FC = () => {
@@ -112,11 +111,12 @@ const SEOAuditWidget: React.FC = () => {
       } else {
         throw new Error(response.message || 'Failed to start audit');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Audit error:', error);
-      console.error('Error response:', error.response);
       setAuditStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'An unexpected error occurred'
+      );
     }
   };
 
@@ -135,10 +135,12 @@ const SEOAuditWidget: React.FC = () => {
       } else {
         throw new Error('Audit timed out');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Status polling error:', error);
       setAuditStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to get audit status');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to get audit status'
+      );
     }
   };
 
@@ -156,7 +158,6 @@ const SEOAuditWidget: React.FC = () => {
     setErrors({});
   };
 
-  // The component's JSX return
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="bg-white rounded-lg shadow-lg p-8">

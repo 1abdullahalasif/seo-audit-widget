@@ -103,29 +103,6 @@ export interface SEOAuditResults {
       isValid?: boolean;
       issues?: string[];
   };
-  crawling?: {
-      robotsTxt: {
-          exists: boolean;
-          hasSitemap: boolean;
-          content?: string;
-          issues: string[];
-      };
-      sitemap: {
-          exists: boolean;
-          urlCount: number;
-          isValid: boolean;
-          issues: string[];
-      };
-      urlStructure: {
-          isValid: boolean;
-          issues: string[];
-      };
-      canonical: {
-          exists: boolean;
-          isDuplicate: boolean;
-          issues: string[];
-      };
-  };
   images: any[];
   onPage?: {
       meta: {
@@ -227,6 +204,17 @@ export interface SEOAuditResults {
           issues: string[];
       };
       scoreBreakdown: ScoreBreakdown;
+  };
+  overallScore: {
+      score: number;
+      maxScore: number;
+      breakdown: {
+          technical: number;
+          onPage: number;
+          offPage: number;
+          analytics: number;
+          advanced: number;
+      };
   };
   summary?: {
       score: number;

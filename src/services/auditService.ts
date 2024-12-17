@@ -13,7 +13,8 @@ interface AuditResponse {
   message?: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api';
+// Ensure trailing slash is removed from API URL
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api').replace(/\/$/, '');
 
 const API_ENDPOINTS = {
   audit: `${API_URL}/audit`,
@@ -27,15 +28,23 @@ const API_ENDPOINTS = {
   analytics: (id: string) => `${API_URL}/audit/${id}/analytics`
 };
 
+const handleResponse = async (response: Response) => {
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Network response was not ok' }));
+    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
 export const auditService = {
   startAudit: async (formData: AuditFormData): Promise<AuditResponse> => {
     try {
+      console.log('Starting audit with URL:', API_ENDPOINTS.audit);
       const response = await fetch(API_ENDPOINTS.audit, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Access-Control-Allow-Origin': '*'
         },
         body: JSON.stringify({
           ...formData,
@@ -43,12 +52,7 @@ export const auditService = {
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to start audit');
-      }
-
-      return response.json();
+      return handleResponse(response);
     } catch (error) {
       console.error('Start audit error:', error);
       throw error instanceof Error ? error : new Error('Failed to start audit');
@@ -64,22 +68,16 @@ export const auditService = {
     };
   }> => {
     try {
+      console.log('Checking audit status:', API_ENDPOINTS.status(id));
       const response = await fetch(API_ENDPOINTS.status(id), {
         headers: {
           'Accept': 'application/json',
-          'Access-Control-Allow-Origin': '*'
         }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to get audit status');
-      }
-
-      const data = await response.json();
+      const data = await handleResponse(response);
       
-      // If audit is complete, fetch all detailed results
-      if (data && data.audit && data.audit.status === 'completed') {
+      if (data?.audit?.status === 'completed') {
         try {
           const [technical, onPage, offPage, analytics, recommendations] = await Promise.all([
             auditService.getTechnicalSEO(id),
@@ -112,64 +110,59 @@ export const auditService = {
   getTechnicalSEO: async (id: string) => {
     try {
       const response = await fetch(API_ENDPOINTS.technicalSEO(id));
-      if (!response.ok) throw new Error('Failed to fetch technical SEO data');
-      return response.json();
+      return handleResponse(response);
     } catch (error) {
       console.error('Get technical SEO error:', error);
-      return {}; // Return an empty object as fallback data
+      return {}; 
     }
   },
 
   getOnPageSEO: async (id: string) => {
     try {
       const response = await fetch(API_ENDPOINTS.onPageSEO(id));
-      if (!response.ok) throw new Error('Failed to fetch on-page SEO data');
-      return response.json();
+      return handleResponse(response);
     } catch (error) {
       console.error('Get on-page SEO error:', error);
-      return {}; // Return an empty object as fallback data
+      return {};
     }
   },
 
   getOffPageSEO: async (id: string) => {
     try {
       const response = await fetch(API_ENDPOINTS.offPageSEO(id));
-      if (!response.ok) throw new Error('Failed to fetch off-page SEO data');
-      return response.json();
+      return handleResponse(response);
     } catch (error) {
       console.error('Get off-page SEO error:', error);
-      return {}; // Return an empty object as fallback data
+      return {};
     }
   },
 
   getAnalytics: async (id: string) => {
     try {
       const response = await fetch(API_ENDPOINTS.analytics(id));
-      if (!response.ok) throw new Error('Failed to fetch analytics data');
-      return response.json();
+      return handleResponse(response);
     } catch (error) {
       console.error('Get analytics error:', error);
-      return {}; // Return an empty object as fallback data
+      return {};
     }
   },
 
   getRecommendations: async (id: string) => {
     try {
       const response = await fetch(API_ENDPOINTS.recommendations(id));
-      if (!response.ok) throw new Error('Failed to fetch recommendations');
-      return response.json();
+      return handleResponse(response);
     } catch (error) {
       console.error('Get recommendations error:', error);
-      return []; // Return an empty array as fallback data
+      return [];
     }
   },
 
   healthCheck: async (): Promise<boolean> => {
     try {
+      console.log('Checking health at:', API_ENDPOINTS.health);
       const response = await fetch(API_ENDPOINTS.health, {
         headers: {
           'Accept': 'application/json',
-          'Access-Control-Allow-Origin': '*'
         }
       });
       return response.ok;

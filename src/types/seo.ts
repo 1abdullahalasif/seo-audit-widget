@@ -1,8 +1,8 @@
 // src/types/seo.ts
 export interface MetaTag {
-  content: string | null;
+  content: string;
   length: number;
-  status?: 'good' | 'warning' | 'error';
+  status: 'good' | 'warning' | 'error';
 }
 
 export interface CoreWebVitals {
@@ -25,86 +25,55 @@ export interface ScoreBreakdown {
 }
 
 export interface SEOAuditResults {
-  meta: {
-    title: MetaTag;
-    description: MetaTag;
-    keywords: string[];
-    favicon: string | null;
-    canonical: string | null;
-    openGraph?: {
-      exists: boolean;
-      tags: string[];
-      issues: string[];
-    };
-  };
-  headings: {
-    h1: Array<{ content: string; length: number; _id?: string }>;
-    h2: any[];
-    h3: any[];
-    h4: any[];
-    h5: any[];
-    h6: any[];
-    structure?: {
-      isValid: boolean;
-      issues: string[];
-    };
-  };
-  content?: {
-    wordCount: number;
-    keywordDensity: Record<string, number>;
-    uniqueness: number;
-    issues: string[];
-  };
-  links: {
-    total: number;
-    internal: number;
-    external: number;
-    broken: any[];
-  };
-  performance: {
-    pageSize: number;
-    pageSpeed?: {
-      mobile: number;
-      desktop: number;
-    };
-    coreWebVitals?: CoreWebVitals;
-    images?: {
-      total: number;
-      unoptimized: number;
-      missingAlt: number;
-      largeImages: number;
-      issues: string[];
-    };
-  };
   technical: {
-    ssl: boolean;
-    redirects: number;
-    security?: {
-      ssl?: {
+    crawling: {
+      robotsTxt: {
+        exists: boolean;
+        hasSitemap: boolean;
+        content?: string;
+        issues: string[];
+      };
+      sitemap: {
+        exists: boolean;
+        urlCount: number;
+        issues: string[];
+      };
+      urlStructure: {
+        isValid: boolean;
+        issues: string[];
+      };
+      canonical: {
+        exists: boolean;
+        isDuplicate: boolean;
+        issues: string[];
+      };
+    };
+    performance: {
+      pageSpeed: {
+        mobile: number;
+        desktop: number;
+      };
+      coreWebVitals: CoreWebVitals;
+      images: {
+        total: number;
+        unoptimized: number;
+        missingAlt: number;
+        largeImages: number;
+        issues: string[];
+      };
+    };
+    security: {
+      ssl: {
         exists: boolean;
         isValid: boolean;
-        expiryDate?: string;
+        expiryDate: string;
         issues: string[];
       };
       httpToHttps: boolean;
     };
+    scoreBreakdown: ScoreBreakdown;
   };
-  robotsTxt: {
-    exists: boolean;
-    error?: string;
-    hasSitemap?: boolean;
-    content?: string;
-    issues?: string[];
-  };
-  sitemap: {
-    exists: boolean;
-    error?: string;
-    urlCount?: number;
-    isValid?: boolean;
-    issues?: string[];
-  };
-  images: any[];
-  onPage?: {
+  onPage: {
     meta: {
       title: MetaTag;
       description: MetaTag;
@@ -139,7 +108,7 @@ export interface SEOAuditResults {
     };
     scoreBreakdown: ScoreBreakdown;
   };
-  offPage?: {
+  offPage: {
     backlinks: {
       total: number;
       toxic: number;
@@ -155,7 +124,7 @@ export interface SEOAuditResults {
     };
     scoreBreakdown: ScoreBreakdown;
   };
-  analytics?: {
+  analytics: {
     tracking: {
       googleAnalytics: {
         exists: boolean;
@@ -177,7 +146,7 @@ export interface SEOAuditResults {
     };
     scoreBreakdown: ScoreBreakdown;
   };
-  advanced?: {
+  advanced: {
     duplicateContent: {
       titles: string[];
       descriptions: string[];
@@ -216,19 +185,11 @@ export interface SEOAuditResults {
       advanced: number;
     };
   };
-  summary?: {
-    score: number;
-    criticalIssues: number;
-    warnings: number;
-    passed: number;
-    recommendations: Array<{
-      type: string;
-      severity: 'critical' | 'warning' | 'info';
-      description: string;
-      impact: string;
-      howToFix: string;
-      _id: string;
-      priority?: number;
-    }>;
-  };
+  recommendations: Array<{
+    category: 'critical' | 'important' | 'minor';
+    issue: string;
+    impact: string;
+    recommendation: string;
+    priority: number;
+  }>;
 }

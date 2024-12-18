@@ -17,40 +17,40 @@ export const calculateTechnicalScore = (results: SEOAuditResults['technical']): 
   const items: ScoreItem[] = [
     {
       name: 'SSL Security',
-      status: results.security.ssl.isValid ? 'pass' : 'fail',
-      score: results.security.ssl.isValid ? 10 : 0,
+      status: results?.security?.ssl?.isValid ? 'pass' : 'fail',
+      score: results?.security?.ssl?.isValid ? 10 : 0,
       maxScore: 10,
-      details: results.security.ssl.issues.join(', ')
+      details: results?.security?.ssl?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Robots.txt',
-      status: results.crawling.robotsTxt.exists ? 'pass' : 'fail',
-      score: results.crawling.robotsTxt.exists ? 5 : 0,
+      status: results?.crawling?.robotsTxt?.exists ? 'pass' : 'fail',
+      score: results?.crawling?.robotsTxt?.exists ? 5 : 0,
       maxScore: 5,
-      details: results.crawling.robotsTxt.issues.join(', ')
+      details: results?.crawling?.robotsTxt?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Sitemap.xml',
-      status: results.crawling.sitemap.isValid ? 'pass' : 'fail',
-      score: results.crawling.sitemap.isValid ? 5 : 0,
+      status: results?.crawling?.sitemap?.exists ? 'pass' : 'fail',
+      score: results?.crawling?.sitemap?.exists ? 5 : 0,
       maxScore: 5,
-      details: results.crawling.sitemap.issues.join(', ')
+      details: results?.crawling?.sitemap?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Page Speed',
-      status: results.performance.pageSpeed.mobile >= 90 ? 'pass' : 
-             results.performance.pageSpeed.mobile >= 50 ? 'warning' : 'fail',
-      score: results.performance.pageSpeed.mobile >= 90 ? 15 :
-             results.performance.pageSpeed.mobile >= 50 ? 7 : 0,
+      status: (results?.performance?.pageSpeed?.mobile || 0) >= 90 ? 'pass' : 
+             (results?.performance?.pageSpeed?.mobile || 0) >= 50 ? 'warning' : 'fail',
+      score: (results?.performance?.pageSpeed?.mobile || 0) >= 90 ? 15 :
+             (results?.performance?.pageSpeed?.mobile || 0) >= 50 ? 7 : 0,
       maxScore: 15,
-      details: `Mobile: ${results.performance.pageSpeed.mobile}, Desktop: ${results.performance.pageSpeed.desktop}`
+      details: `Mobile: ${results?.performance?.pageSpeed?.mobile || 0}, Desktop: ${results?.performance?.pageSpeed?.desktop || 0}`
     },
     {
       name: 'Core Web Vitals',
-      status: results.performance.coreWebVitals.status === 'good' ? 'pass' : 
-              results.performance.coreWebVitals.status === 'needs-improvement' ? 'warning' : 'fail',
-      score: results.performance.coreWebVitals.status === 'good' ? 15 : 
-             results.performance.coreWebVitals.status === 'needs-improvement' ? 7 : 0,
+      status: results?.performance?.coreWebVitals?.status === 'good' ? 'pass' : 
+              results?.performance?.coreWebVitals?.status === 'needs-improvement' ? 'warning' : 'fail',
+      score: results?.performance?.coreWebVitals?.status === 'good' ? 15 : 
+             results?.performance?.coreWebVitals?.status === 'needs-improvement' ? 7 : 0,
       maxScore: 15
     }
   ];
@@ -62,38 +62,38 @@ export const calculateOnPageScore = (results: SEOAuditResults['onPage']): ScoreB
   const items: ScoreItem[] = [
     {
       name: 'Meta Title',
-      status: results.meta.title.status === 'good' ? 'pass' : 'warning',
-      score: results.meta.title.status === 'good' ? 10 : 5,
+      status: results?.meta?.title?.status === 'good' ? 'pass' : 'warning',
+      score: results?.meta?.title?.status === 'good' ? 10 : 5,
       maxScore: 10
     },
     {
       name: 'Meta Description',
-      status: results.meta.description.status === 'good' ? 'pass' : 'warning',
-      score: results.meta.description.status === 'good' ? 10 : 5,
+      status: results?.meta?.description?.status === 'good' ? 'pass' : 'warning',
+      score: results?.meta?.description?.status === 'good' ? 10 : 5,
       maxScore: 10
     },
     {
       name: 'Heading Structure',
-      status: results.headings.structure.isValid ? 'pass' : 'fail',
-      score: results.headings.structure.isValid ? 10 : 0,
+      status: results?.headings?.structure?.isValid ? 'pass' : 'fail',
+      score: results?.headings?.structure?.isValid ? 10 : 0,
       maxScore: 10,
-      details: results.headings.structure.issues.join(', ')
+      details: results?.headings?.structure?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Content Quality',
-      status: results.content.uniqueness > 90 ? 'pass' :
-              results.content.uniqueness > 70 ? 'warning' : 'fail',
-      score: results.content.uniqueness > 90 ? 10 :
-              results.content.uniqueness > 70 ? 5 : 0,
+      status: (results?.content?.uniqueness || 0) > 90 ? 'pass' :
+              (results?.content?.uniqueness || 0) > 70 ? 'warning' : 'fail',
+      score: (results?.content?.uniqueness || 0) > 90 ? 10 :
+              (results?.content?.uniqueness || 0) > 70 ? 5 : 0,
       maxScore: 10,
-      details: `Uniqueness: ${results.content.uniqueness}%`
+      details: `Uniqueness: ${results?.content?.uniqueness || 0}%`
     },
     {
       name: 'Internal Links',
-      status: results.internalLinks.broken === 0 ? 'pass' : 'fail',
-      score: results.internalLinks.broken === 0 ? 10 : 0,
+      status: (results?.internalLinks?.broken || 0) === 0 ? 'pass' : 'fail',
+      score: (results?.internalLinks?.broken || 0) === 0 ? 10 : 0,
       maxScore: 10,
-      details: `${results.internalLinks.broken} broken links found`
+      details: `${results?.internalLinks?.broken || 0} broken links found`
     }
   ];
 
@@ -104,31 +104,31 @@ export const calculateAnalyticsScore = (results: SEOAuditResults['analytics']): 
   const items: ScoreItem[] = [
     {
       name: 'Google Analytics',
-      status: results.tracking.googleAnalytics.exists ? 'pass' : 'fail',
-      score: results.tracking.googleAnalytics.exists ? 10 : 0,
+      status: results?.tracking?.googleAnalytics?.exists ? 'pass' : 'fail',
+      score: results?.tracking?.googleAnalytics?.exists ? 10 : 0,
       maxScore: 10,
-      details: results.tracking.googleAnalytics.issues.join(', ')
+      details: results?.tracking?.googleAnalytics?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Tag Manager',
-      status: results.tracking.tagManager.exists ? 'pass' : 'fail',
-      score: results.tracking.tagManager.exists ? 10 : 0,
+      status: results?.tracking?.tagManager?.exists ? 'pass' : 'fail',
+      score: results?.tracking?.tagManager?.exists ? 10 : 0,
       maxScore: 10,
-      details: results.tracking.tagManager.issues.join(', ')
+      details: results?.tracking?.tagManager?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Facebook Pixel',
-      status: results.tracking.facebookPixel.exists ? 'pass' : 'fail',
-      score: results.tracking.facebookPixel.exists ? 5 : 0,
+      status: results?.tracking?.facebookPixel?.exists ? 'pass' : 'fail',
+      score: results?.tracking?.facebookPixel?.exists ? 5 : 0,
       maxScore: 5,
-      details: results.tracking.facebookPixel.issues.join(', ')
+      details: results?.tracking?.facebookPixel?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Search Console',
-      status: results.searchConsole.indexingErrors === 0 ? 'pass' : 'warning',
-      score: results.searchConsole.indexingErrors === 0 ? 15 : 7,
+      status: (results?.searchConsole?.indexingErrors || 0) === 0 ? 'pass' : 'warning',
+      score: (results?.searchConsole?.indexingErrors || 0) === 0 ? 15 : 7,
       maxScore: 15,
-      details: results.searchConsole.issues.join(', ')
+      details: results?.searchConsole?.issues?.join(', ') || 'No details available'
     }
   ];
 
@@ -139,31 +139,35 @@ export const calculateAdvancedScore = (results: SEOAuditResults['advanced']): Sc
   const items: ScoreItem[] = [
     {
       name: 'Schema Markup',
-      status: results.schema.isValid ? 'pass' : results.schema.exists ? 'warning' : 'fail',
-      score: results.schema.isValid ? 15 : results.schema.exists ? 7 : 0,
+      status: results?.schema?.isValid ? 'pass' : results?.schema?.exists ? 'warning' : 'fail',
+      score: results?.schema?.isValid ? 15 : results?.schema?.exists ? 7 : 0,
       maxScore: 15,
-      details: results.schema.issues.join(', ')
+      details: results?.schema?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Internationalization',
-      status: results.international.hreflang.isValid ? 'pass' : 'fail',
-      score: results.international.hreflang.isValid ? 10 : 0,
+      status: results?.international?.hreflang?.isValid ? 'pass' : 'fail',
+      score: results?.international?.hreflang?.isValid ? 10 : 0,
       maxScore: 10,
-      details: results.international.hreflang.issues.join(', ')
+      details: results?.international?.hreflang?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'JavaScript Rendering',
-      status: results.javascript.renderingIssues.length === 0 ? 'pass' : 'warning',
-      score: results.javascript.renderingIssues.length === 0 ? 10 : 5,
+      status: (results?.javascript?.renderingIssues?.length || 0) === 0 ? 'pass' : 'warning',
+      score: (results?.javascript?.renderingIssues?.length || 0) === 0 ? 10 : 5,
       maxScore: 10,
-      details: results.javascript.issues.join(', ')
+      details: results?.javascript?.issues?.join(', ') || 'No details available'
     },
     {
       name: 'Duplicate Content',
-      status: Object.values(results.duplicateContent).every(arr => arr.length === 0) ? 'pass' : 'warning',
-      score: Object.values(results.duplicateContent).every(arr => arr.length === 0) ? 15 : 7,
+      status: !results?.duplicateContent?.titles?.length && 
+              !results?.duplicateContent?.descriptions?.length && 
+              !results?.duplicateContent?.h1s?.length ? 'pass' : 'warning',
+      score: !results?.duplicateContent?.titles?.length && 
+             !results?.duplicateContent?.descriptions?.length && 
+             !results?.duplicateContent?.h1s?.length ? 15 : 7,
       maxScore: 15,
-      details: results.duplicateContent.issues.join(', ')
+      details: results?.duplicateContent?.issues?.join(', ') || 'No details available'
     }
   ];
 
@@ -174,17 +178,17 @@ export const calculateOffPageScore = (results: SEOAuditResults['offPage']): Scor
   const items: ScoreItem[] = [
     {
       name: 'Backlink Quality',
-      status: results.backlinks.toxic < results.backlinks.total * 0.1 ? 'pass' : 'fail',
-      score: results.backlinks.toxic < results.backlinks.total * 0.1 ? 20 : 0,
+      status: (results?.backlinks?.toxic || 0) < (results?.backlinks?.total || 1) * 0.1 ? 'pass' : 'fail',
+      score: (results?.backlinks?.toxic || 0) < (results?.backlinks?.total || 1) * 0.1 ? 20 : 0,
       maxScore: 20,
-      details: `Total: ${results.backlinks.total}, Toxic: ${results.backlinks.toxic}`
+      details: `Total: ${results?.backlinks?.total || 0}, Toxic: ${results?.backlinks?.toxic || 0}`
     },
     {
       name: 'Social Media',
-      status: Object.values(results.socialMedia.platforms).some(p => p.exists) ? 'pass' : 'fail',
-      score: Object.values(results.socialMedia.platforms).filter(p => p.exists).length * 5,
+      status: Object.values(results?.socialMedia?.platforms || {}).some(p => p.exists) ? 'pass' : 'fail',
+      score: Object.values(results?.socialMedia?.platforms || {}).filter(p => p.exists).length * 5,
       maxScore: 20,
-      details: results.socialMedia.issues.join(', ')
+      details: results?.socialMedia?.issues?.join(', ') || 'No details available'
     }
   ];
 

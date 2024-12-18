@@ -10,7 +10,8 @@ import {
   calculateOnPageScore,
   calculateOffPageScore,
   calculateAnalyticsScore,
-  calculateAdvancedScore
+  calculateAdvancedScore,
+  calculateOverallScore 
 } from 'src/utils/scoring';
 import { 
   SCORE_THRESHOLDS,
@@ -96,41 +97,56 @@ const SEOAuditWidget: React.FC = () => {
     setRetryCount(0);
 
     try {
+      // First check if the service is available
+      const isHealthy = await auditService.healthCheck();
+      if (!isHealthy) {
+        throw new Error('Service is currently unavailable. Please try again later.');
+      }
+
+      console.log('Starting audit with form data:', formData);
       const response = await auditService.startAudit(formData);
+      
       if (response.success && response.auditId) {
+        console.log('Audit started successfully with ID:', response.auditId);
         pollAuditStatus(response.auditId);
       } else {
         throw new Error(response.message || 'Failed to start audit');
       }
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('Audit error:', error);
       setAuditStatus('error');
       setErrorMessage(
-        error instanceof Error ? error.message : 'An unexpected error occurred'
+        error instanceof Error 
+          ? error.message 
+          : 'An unexpected error occurred. Please try again.'
       );
     }
   };
 
   const pollAuditStatus = async (id: string, pollAttempt = 0) => {
     try {
+      console.log(`Polling audit status (attempt ${pollAttempt + 1}/${MAX_POLL_ATTEMPTS})`);
       const response = await auditService.getAuditStatus(id);
 
       if (response.audit.status === 'completed' && response.audit.results) {
+        console.log('Audit completed successfully:', response.audit.results);
         setAuditStatus('completed');
         setResults(response.audit.results);
       } else if (response.audit.status === 'failed') {
-        setAuditStatus('error');
-        setErrorMessage(response.audit.error || 'Audit failed');
+        throw new Error(response.audit.error || 'Audit failed');
       } else if (pollAttempt < MAX_POLL_ATTEMPTS) {
+        console.log(`Waiting ${POLL_INTERVAL}ms before next poll...`);
         setTimeout(() => pollAuditStatus(id, pollAttempt + 1), POLL_INTERVAL);
       } else {
-        throw new Error('Audit timed out');
+        throw new Error('Audit timed out. Please try again.');
       }
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('Status polling error:', error);
       setAuditStatus('error');
       setErrorMessage(
-        error instanceof Error ? error.message : 'Failed to get audit status'
+        error instanceof Error 
+          ? error.message 
+          : 'Failed to get audit status'
       );
     }
   };
@@ -256,7 +272,7 @@ const SEOAuditWidget: React.FC = () => {
 
         {auditStatus === 'completed' && results && (
           <div className="space-y-8">
-            {/* Overall Score Section */}
+            {/* Overall Score */}
             <div className="bg-white rounded-lg shadow-lg p-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Overall SEO Score</h2>
@@ -309,38 +325,38 @@ const SEOAuditWidget: React.FC = () => {
               />
             </div>
 
-{/* Recommendations Section */}
-{results.recommendations && results.recommendations.length > 0 && (
-  <div className="bg-white rounded-lg shadow-lg p-8">
-    <h3 className="text-xl font-bold mb-6">Critical Issues & Recommendations</h3>
-    <div className="space-y-4">
-      {results.recommendations
-        .sort((a, b) => b.priority - a.priority)
-        .map((rec, index) => (
-          <div key={index} className={`p-4 rounded-lg ${
-            rec.category === 'critical' ? 'bg-red-50' :
-            rec.category === 'important' ? 'bg-yellow-50' :
-            'bg-blue-50'
-          }`}>
-            <div className="flex justify-between items-start mb-2">
-              <h4 className="font-medium">{rec.issue}</h4>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                rec.category === 'critical' ? 'bg-red-100 text-red-800' :
-                rec.category === 'important' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-blue-100 text-blue-800'
-              }`}>
-                {rec.category}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 mb-2">Impact: {rec.impact}</p>
-            <p className="text-sm text-gray-800">
-              Recommendation: {rec.recommendation}
-            </p>
-          </div>
-        ))}
-    </div>
-  </div>
-)}
+            {/* Recommendations Section */}
+            {results.recommendations && results.recommendations.length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-8">
+                <h3 className="text-xl font-bold mb-6">Critical Issues & Recommendations</h3>
+                <div className="space-y-4">
+                  {results.recommendations
+                    .sort((a, b) => b.priority - a.priority)
+                    .map((rec, index) => (
+                      <div key={index} className={`p-4 rounded-lg ${
+                        rec.category === 'critical' ? 'bg-red-50' :
+                        rec.category === 'important' ? 'bg-yellow-50' :
+                        'bg-blue-50'
+                      }`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-medium">{rec.issue}</h4>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            rec.category === 'critical' ? 'bg-red-100 text-red-800' :
+                            rec.category === 'important' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {rec.category}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">Impact: {rec.impact}</p>
+                        <p className="text-sm text-gray-800">
+                          Recommendation: {rec.recommendation}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Action Button */}
             <div className="text-center">
@@ -369,7 +385,7 @@ const SEOAuditWidget: React.FC = () => {
             </button>
           </div>
         )}
-        </div>
+      </div>
     </div>
   );
 };

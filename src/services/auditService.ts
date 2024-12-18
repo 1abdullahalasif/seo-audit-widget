@@ -13,31 +13,61 @@ interface AuditResponse {
   message?: string;
 }
 
-// Ensure trailing slash is removed from API URL
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com/api').replace(/\/$/, '');
-
-const API_ENDPOINTS = {
-  audit: `${API_URL}/audit`,
-  status: (id: string) => `${API_URL}/audit/${id}`,
-  health: `${API_URL}/health`,
-  details: (id: string) => `${API_URL}/audit/${id}/details`,
-  recommendations: (id: string) => `${API_URL}/audit/${id}/recommendations`,
-  technicalSEO: (id: string) => `${API_URL}/audit/${id}/technical`,
-  onPageSEO: (id: string) => `${API_URL}/audit/${id}/onpage`,
-  offPageSEO: (id: string) => `${API_URL}/audit/${id}/offpage`,
-  analytics: (id: string) => `${API_URL}/audit/${id}/analytics`
+// Base API URL configuration
+const getBaseUrl = () => {
+  let url = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com';
+  // Remove trailing slash if present
+  url = url.replace(/\/$/, '');
+  // Ensure /api suffix
+  if (!url.endsWith('/api')) {
+    url = `${url}/api`;
+  }
+  return url;
 };
 
+const BASE_URL = getBaseUrl();
+
+const API_ENDPOINTS = {
+  audit: `${BASE_URL}/audit`,
+  status: (id: string) => `${BASE_URL}/audit/${id}`,
+  health: `${BASE_URL}/health`,
+  details: (id: string) => `${BASE_URL}/audit/${id}/details`,
+  recommendations: (id: string) => `${BASE_URL}/audit/${id}/recommendations`,
+  technicalSEO: (id: string) => `${BASE_URL}/audit/${id}/technical`,
+  onPageSEO: (id: string) => `${BASE_URL}/audit/${id}/onpage`,
+  offPageSEO: (id: string) => `${BASE_URL}/audit/${id}/offpage`,
+  analytics: (id: string) => `${BASE_URL}/audit/${id}/analytics`
+};
+
+// Enhanced error handling
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Network response was not ok' }));
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    const contentType = response.headers.get('content-type');
+    let errorMessage = `HTTP error! status: ${response.status}`;
+    
+    try {
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorMessage;
+      } else {
+        errorMessage = await response.text() || errorMessage;
+      }
+    } catch (error) {
+      console.error('Error parsing error response:', error);
+    }
+    
+    throw new Error(errorMessage);
   }
-  return response.json();
+  
+  try {
+    return await response.json();
+  } catch (error) {
+    console.error('Error parsing JSON response:', error);
+    throw new Error('Invalid JSON response from server');
+  }
 };
 
 const transformAuditResults = (data: any): SEOAuditResults => {
-  // Ensure we have default values for all required properties
   return {
     technical: {
       crawling: {
@@ -249,7 +279,9 @@ export const auditService = {
         })
       });
 
-      return handleResponse(response);
+      const data = await handleResponse(response);
+      console.log('Audit start response:', data);
+      return data;
     } catch (error) {
       console.error('Start audit error:', error);
       throw error instanceof Error ? error : new Error('Failed to start audit');
@@ -275,7 +307,6 @@ export const auditService = {
       const data = await handleResponse(response);
       
       if (data?.audit?.status === 'completed') {
-        // Transform the raw data into our expected format
         data.audit.results = transformAuditResults(data.audit);
         console.log('Transformed audit results:', data.audit.results);
       }
@@ -340,12 +371,29 @@ export const auditService = {
   healthCheck: async (): Promise<boolean> => {
     try {
       console.log('Checking health at:', API_ENDPOINTS.health);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       const response = await fetch(API_ENDPOINTS.health, {
         headers: {
           'Accept': 'application/json',
-        }
+        },
+        signal: controller.signal
       });
-      return response.ok;
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.error('Health check failed:', {
+          status: response.status,
+          statusText: response.statusText
+        });
+        return false;
+      }
+
+      const data = await response.json();
+      console.log('Health check response:', data);
+      return true;
     } catch (error) {
       console.error('Health check error:', error);
       return false;

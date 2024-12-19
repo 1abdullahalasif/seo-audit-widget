@@ -33,16 +33,23 @@ const API_ENDPOINTS = {
 };
 
 const handleResponse = async (response: Response) => {
+  const contentType = response.headers.get('content-type');
+  
   if (!response.ok) {
-    const contentType = response.headers.get('content-type');
     let errorMessage = `HTTP error! status: ${response.status}`;
     
     try {
-      if (contentType && contentType.includes('application/json')) {
+      if (contentType?.includes('application/json')) {
         const errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
       } else {
-        errorMessage = await response.text() || errorMessage;
+        const text = await response.text();
+        // If we get HTML error, make it more user-friendly
+        if (text.includes('<!DOCTYPE html>')) {
+          errorMessage = 'Server error: Please try again later';
+        } else {
+          errorMessage = text || errorMessage;
+        }
       }
     } catch (error) {
       console.error('Error parsing error response:', error);
@@ -51,11 +58,20 @@ const handleResponse = async (response: Response) => {
     throw new Error(errorMessage);
   }
   
+  // For successful responses
   try {
-    return await response.json();
+    if (contentType?.includes('application/json')) {
+      return await response.json();
+    }
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('Invalid response format from server');
+    }
   } catch (error) {
-    console.error('Error parsing JSON response:', error);
-    throw new Error('Invalid JSON response from server');
+    console.error('Error parsing response:', error);
+    throw new Error('Invalid response format from server');
   }
 };
 
@@ -262,9 +278,9 @@ export const auditService = {
       const response = await fetch(API_ENDPOINTS.health, {
         method: 'GET',
         headers: {
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         },
-        mode: 'cors',
         cache: 'no-cache'
       });
 
@@ -292,7 +308,6 @@ export const auditService = {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        mode: 'cors',
         body: JSON.stringify({
           ...formData,
           companyDomain: new URL(formData.websiteUrl).hostname
@@ -321,9 +336,9 @@ export const auditService = {
       const response = await fetch(API_ENDPOINTS.status(id), {
         method: 'GET',
         headers: {
-          'Accept': 'application/json'
-        },
-        mode: 'cors'
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       });
 
       const data = await handleResponse(response);
@@ -343,7 +358,12 @@ export const auditService = {
 
   getTechnicalSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.technicalSEO(id));
+      const response = await fetch(API_ENDPOINTS.technicalSEO(id), {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       return handleResponse(response);
     } catch (error) {
       console.error('Get technical SEO error:', error);
@@ -353,7 +373,12 @@ export const auditService = {
 
   getOnPageSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.onPageSEO(id));
+      const response = await fetch(API_ENDPOINTS.onPageSEO(id), {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       return handleResponse(response);
     } catch (error) {
       console.error('Get on-page SEO error:', error);
@@ -363,7 +388,12 @@ export const auditService = {
 
   getOffPageSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.offPageSEO(id));
+      const response = await fetch(API_ENDPOINTS.offPageSEO(id), {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       return handleResponse(response);
     } catch (error) {
       console.error('Get off-page SEO error:', error);
@@ -373,7 +403,12 @@ export const auditService = {
 
   getAnalytics: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.analytics(id));
+      const response = await fetch(API_ENDPOINTS.analytics(id), {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       return handleResponse(response);
     } catch (error) {
       console.error('Get analytics error:', error);
@@ -383,7 +418,12 @@ export const auditService = {
 
   getRecommendations: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.recommendations(id));
+      const response = await fetch(API_ENDPOINTS.recommendations(id), {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       return handleResponse(response);
     } catch (error) {
       console.error('Get recommendations error:', error);

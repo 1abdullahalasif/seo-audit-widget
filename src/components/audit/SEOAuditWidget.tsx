@@ -45,18 +45,27 @@ const SEOAuditWidget: React.FC = () => {
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    checkBackendStatus();
-    const keepAliveInterval = setInterval(checkBackendStatus, HEALTH_CHECK_INTERVAL);
+    const initialCheck = async () => {
+      try {
+        const isUp = await auditService.healthCheck();
+        if (!isUp) {
+          setAuditStatus('error');
+          setErrorMessage('Service is temporarily unavailable. Please try again later.');
+        } else {
+          setAuditStatus('idle');
+          setErrorMessage(null);
+        }
+      } catch (error) {
+        console.error('Initial health check error:', error);
+        setAuditStatus('error');
+        setErrorMessage('Unable to connect to the service. Please try again later.');
+      }
+    };
+
+    initialCheck();
+    const keepAliveInterval = setInterval(initialCheck, HEALTH_CHECK_INTERVAL);
     return () => clearInterval(keepAliveInterval);
   }, []);
-
-  const checkBackendStatus = async () => {
-    const isUp = await auditService.healthCheck();
-    if (!isUp) {
-      setAuditStatus('error');
-      setErrorMessage('Service is temporarily unavailable. Please try again later.');
-    }
-  };
 
   const validateForm = (): { isValid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
@@ -97,12 +106,6 @@ const SEOAuditWidget: React.FC = () => {
     setRetryCount(0);
 
     try {
-      // First check if the service is available
-      const isHealthy = await auditService.healthCheck();
-      if (!isHealthy) {
-        throw new Error('Service is currently unavailable. Please try again later.');
-      }
-
       console.log('Starting audit with form data:', formData);
       const response = await auditService.startAudit(formData);
       
@@ -163,6 +166,18 @@ const SEOAuditWidget: React.FC = () => {
     setResults(null);
     setErrorMessage(null);
     setErrors({});
+  };
+
+  const handleRetry = async () => {
+    setAuditStatus('idle');
+    setErrorMessage(null);
+    const isUp = await auditService.healthCheck();
+    if (isUp) {
+      resetForm();
+    } else {
+      setAuditStatus('error');
+      setErrorMessage('Service is still unavailable. Please try again later.');
+    }
   };
 
   return (
@@ -378,7 +393,7 @@ const SEOAuditWidget: React.FC = () => {
               {errorMessage || 'An error occurred while analyzing your website.'}
             </p>
             <button
-              onClick={resetForm}
+              onClick={handleRetry}
               className="mt-4 px-6 py-2 text-[#ff9270] hover:text-opacity-90 rounded-md border border-[#ff9270]"
             >
               Try Again

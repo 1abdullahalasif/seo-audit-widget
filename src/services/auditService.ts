@@ -15,14 +15,7 @@ interface AuditResponse {
 
 // Base API URL configuration
 const getBaseUrl = () => {
-  let url = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com';
-  // Remove trailing slash if present
-  url = url.replace(/\/$/, '');
-  // Ensure /api suffix
-  if (!url.endsWith('/api')) {
-    url = `${url}/api`;
-  }
-  return url;
+  return process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com';
 };
 
 const BASE_URL = getBaseUrl();
@@ -39,7 +32,6 @@ const API_ENDPOINTS = {
   analytics: (id: string) => `${BASE_URL}/audit/${id}/analytics`
 };
 
-// Enhanced error handling
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
     const contentType = response.headers.get('content-type');
@@ -264,6 +256,33 @@ const transformAuditResults = (data: any): SEOAuditResults => {
 };
 
 export const auditService = {
+  healthCheck: async (): Promise<boolean> => {
+    try {
+      console.log('Checking health at:', API_ENDPOINTS.health);
+      const response = await fetch(API_ENDPOINTS.health, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        },
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+
+      if (!response.ok) {
+        console.error('Health check failed:', {
+          status: response.status,
+          statusText: response.statusText
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Health check error:', error);
+      return false;
+    }
+  },
+
   startAudit: async (formData: AuditFormData): Promise<AuditResponse> => {
     try {
       console.log('Starting audit with URL:', API_ENDPOINTS.audit);
@@ -271,8 +290,9 @@ export const auditService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          'Accept': 'application/json'
         },
+        mode: 'cors',
         body: JSON.stringify({
           ...formData,
           companyDomain: new URL(formData.websiteUrl).hostname
@@ -299,16 +319,19 @@ export const auditService = {
     try {
       console.log('Checking audit status:', API_ENDPOINTS.status(id));
       const response = await fetch(API_ENDPOINTS.status(id), {
+        method: 'GET',
         headers: {
-          'Accept': 'application/json',
-        }
+          'Accept': 'application/json'
+        },
+        mode: 'cors'
       });
 
       const data = await handleResponse(response);
       
-      if (data?.audit?.status === 'completed') {
-        data.audit.results = transformAuditResults(data.audit);
-        console.log('Transformed audit results:', data.audit.results);
+      if (data?.audit?.status === 'completed' && data?.audit?.results) {
+        const transformedResults = transformAuditResults(data.audit);
+        data.audit.results = transformedResults;
+        console.log('Transformed audit results:', transformedResults);
       }
 
       return data;
@@ -365,38 +388,6 @@ export const auditService = {
     } catch (error) {
       console.error('Get recommendations error:', error);
       return [];
-    }
-  },
-
-  healthCheck: async (): Promise<boolean> => {
-    try {
-      console.log('Checking health at:', API_ENDPOINTS.health);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const response = await fetch(API_ENDPOINTS.health, {
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        console.error('Health check failed:', {
-          status: response.status,
-          statusText: response.statusText
-        });
-        return false;
-      }
-
-      const data = await response.json();
-      console.log('Health check response:', data);
-      return true;
-    } catch (error) {
-      console.error('Health check error:', error);
-      return false;
     }
   }
 };

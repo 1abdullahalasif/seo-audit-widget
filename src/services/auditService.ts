@@ -13,12 +13,16 @@ interface AuditResponse {
   message?: string;
 }
 
-// Base API URL configuration
+// Enhanced API configuration
 const getBaseUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com';
+  const url = process.env.NEXT_PUBLIC_API_URL || 'https://seo-audit-backend.onrender.com';
+  return url.endsWith('/') ? url.slice(0, -1) : url;
 };
 
 const BASE_URL = getBaseUrl();
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;
+const REQUEST_TIMEOUT = 30000;
 
 const API_ENDPOINTS = {
   audit: `${BASE_URL}/audit`,
@@ -30,6 +34,49 @@ const API_ENDPOINTS = {
   onPageSEO: (id: string) => `${BASE_URL}/audit/${id}/onpage`,
   offPageSEO: (id: string) => `${BASE_URL}/audit/${id}/offpage`,
   analytics: (id: string) => `${BASE_URL}/audit/${id}/analytics`
+};
+
+// Enhanced fetch with retry logic
+const fetchWithRetry = async (
+  url: string, 
+  options: RequestInit, 
+  retries = MAX_RETRIES
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok && retries > 0) {
+      console.warn(`Request failed (${response.status}), retrying... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`);
+    }
+
+    if (retries > 0) {
+      console.warn(`Network error, retrying... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 const handleResponse = async (response: Response) => {
@@ -275,12 +322,8 @@ export const auditService = {
   healthCheck: async (): Promise<boolean> => {
     try {
       console.log('Checking health at:', API_ENDPOINTS.health);
-      const response = await fetch(API_ENDPOINTS.health, {
+      const response = await fetchWithRetry(API_ENDPOINTS.health, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
         cache: 'no-cache'
       });
 
@@ -302,12 +345,8 @@ export const auditService = {
   startAudit: async (formData: AuditFormData): Promise<AuditResponse> => {
     try {
       console.log('Starting audit with URL:', API_ENDPOINTS.audit);
-      const response = await fetch(API_ENDPOINTS.audit, {
+      const response = await fetchWithRetry(API_ENDPOINTS.audit, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
         body: JSON.stringify({
           ...formData,
           companyDomain: new URL(formData.websiteUrl).hostname
@@ -333,12 +372,8 @@ export const auditService = {
   }> => {
     try {
       console.log('Checking audit status:', API_ENDPOINTS.status(id));
-      const response = await fetch(API_ENDPOINTS.status(id), {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+      const response = await fetchWithRetry(API_ENDPOINTS.status(id), {
+        method: 'GET'
       });
 
       const data = await handleResponse(response);
@@ -358,11 +393,8 @@ export const auditService = {
 
   getTechnicalSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.technicalSEO(id), {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+      const response = await fetchWithRetry(API_ENDPOINTS.technicalSEO(id), {
+        method: 'GET'
       });
       return handleResponse(response);
     } catch (error) {
@@ -373,11 +405,8 @@ export const auditService = {
 
   getOnPageSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.onPageSEO(id), {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+      const response = await fetchWithRetry(API_ENDPOINTS.onPageSEO(id), {
+        method: 'GET'
       });
       return handleResponse(response);
     } catch (error) {
@@ -388,11 +417,8 @@ export const auditService = {
 
   getOffPageSEO: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.offPageSEO(id), {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+      const response = await fetchWithRetry(API_ENDPOINTS.offPageSEO(id), {
+        method: 'GET'
       });
       return handleResponse(response);
     } catch (error) {
@@ -403,11 +429,8 @@ export const auditService = {
 
   getAnalytics: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.analytics(id), {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+      const response = await fetchWithRetry(API_ENDPOINTS.analytics(id), {
+        method: 'GET'
       });
       return handleResponse(response);
     } catch (error) {
@@ -418,11 +441,8 @@ export const auditService = {
 
   getRecommendations: async (id: string) => {
     try {
-      const response = await fetch(API_ENDPOINTS.recommendations(id), {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+      const response = await fetchWithRetry(API_ENDPOINTS.recommendations(id), {
+        method: 'GET'
       });
       return handleResponse(response);
     } catch (error) {

@@ -143,28 +143,28 @@ export default function Home() {
       good: 1800, warn: 3000, unit: 'ms',
       label: 'First Contentful Paint',
       desc: 'Time until the first text or image is visible to the user. Measures how quickly your page starts loading.',
-      goodRange: '< 1.8s', warnRange: '1.8s – 3s', badRange: '> 3s',
+      goodRange: '< 1.8s', warnRange: '1.8s to 3s', badRange: '> 3s',
     },
     {
       key: 'LCP', val: ps.lcpDisplay || `${(ps.lcp/1000).toFixed(1)}s`, raw: ps.lcp,
       good: 2500, warn: 4000, unit: 'ms',
       label: 'Largest Contentful Paint',
       desc: 'Time until the largest visible element loads (hero image, heading). Google\'s key ranking signal for perceived load speed.',
-      goodRange: '< 2.5s', warnRange: '2.5s – 4s', badRange: '> 4s',
+      goodRange: '< 2.5s', warnRange: '2.5s to 4s', badRange: '> 4s',
     },
     {
       key: 'TBT', val: ps.tbtDisplay || `${Math.round(ps.tbt)}ms`, raw: ps.tbt,
       good: 200, warn: 600, unit: 'ms',
       label: 'Total Blocking Time',
       desc: 'Total time the main thread was blocked, preventing user interaction. High TBT causes a sluggish, unresponsive feel.',
-      goodRange: '< 200ms', warnRange: '200ms – 600ms', badRange: '> 600ms',
+      goodRange: '< 200ms', warnRange: '200ms to 600ms', badRange: '> 600ms',
     },
     {
       key: 'CLS', val: ps.clsDisplay || ps.cls.toFixed(3), raw: ps.cls * 1000,
       good: 100, warn: 250, unit: 'raw',
       label: 'Cumulative Layout Shift',
-      desc: 'Measures visual stability — how much the page layout unexpectedly shifts during loading. Causes accidental clicks.',
-      goodRange: '< 0.1', warnRange: '0.1 – 0.25', badRange: '> 0.25',
+      desc: 'Measures visual stability how much the page layout unexpectedly shifts during loading. Causes accidental clicks.',
+      goodRange: '< 0.1', warnRange: '0.1 to 0.25', badRange: '> 0.25',
     },
   ] : [];
 
@@ -289,7 +289,7 @@ export default function Home() {
               <div style={{ textAlign: 'center', marginBottom: 32 }}>
                 <span style={{ display: 'inline-block', background: '#e8693a', color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: '.14em', padding: '4px 12px', borderRadius: 99, marginBottom: 14, textTransform: 'uppercase' }}>Free Tool</span>
                 <h1 style={{ fontFamily: 'Fraunces,serif', fontSize: 'clamp(26px,5vw,44px)', fontWeight: 300, lineHeight: 1.15, color: '#111', marginBottom: 10 }}>Website SEO Audit</h1>
-                <p style={{ color: '#666', fontSize: 14, maxWidth: 440, margin: '0 auto', lineHeight: 1.8, fontWeight: 300 }}>Comprehensive SEO analysis — crawls up to 10 pages, checks PageSpeed Core Web Vitals, broken links, duplicate content and more.</p>
+                <p style={{ color: '#666', fontSize: 14, maxWidth: 440, margin: '0 auto', lineHeight: 1.8, fontWeight: 300 }}>Get a full SEO analysis of your website. We check page speed, meta tags, headings, images, broken links and more.</p>
               </div>
               <div className="card" style={{ padding: '28px 24px 24px' }}>
                 <h2 style={{ fontFamily: 'Fraunces,serif', fontSize: 18, fontWeight: 400, marginBottom: 20, color: '#111' }}>Start Your Free Audit</h2>
@@ -307,7 +307,7 @@ export default function Home() {
                 <button className="sbtn" onClick={submit} disabled={loading}>
                   {loading ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.35)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .7s linear infinite' }} />{loadingMsg}</span> : 'Start Free Audit'}
                 </button>
-                <p style={{ fontSize: 11, color: '#aaa', marginTop: 10, textAlign: 'center' }}>Crawls up to 10 pages · PageSpeed Core Web Vitals · Broken links · Duplicate content</p>
+                <p style={{ fontSize: 11, color: '#aaa', marginTop: 10, textAlign: 'center' }}>Free to use. No credit card required. Results in under 60 seconds.</p>
               </div>
               <div className="cg" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 12 }}>
                 {[['📄','Page-by-Page','Title, meta, H1 on every page'],['⚡','Core Web Vitals','FCP, LCP, TBT, CLS scores'],['🔗','Broken Links','Detects 404 and dead links'],['📋','Schema Detail','Lists all structured data found']].map(([ic,t,d]) => (
@@ -391,7 +391,7 @@ export default function Home() {
 
                 {psError && !psLoading && (
                   <div style={{ padding: '16px 20px', color: '#888', fontSize: 12 }}>
-                    PageSpeed data could not be loaded. This may be due to rate limiting — try again in a few minutes.
+                    PageSpeed data could not be loaded. This may be due to rate limiting try again in a few minutes.
                   </div>
                 )}
 
@@ -416,7 +416,7 @@ export default function Home() {
 
                     {/* CWV metrics */}
                     <div style={{ borderTop: '1px solid #f0ece5', paddingTop: 16, marginBottom: 16 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#888', marginBottom: 12 }}>Core Web Vitals — What They Mean</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#888', marginBottom: 12 }}>Core Web Vitals What They Mean</div>
                       <div className="cwv-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
                         {cwvMetrics.map(m => {
                           const pct = Math.min(100, (m.raw / m.warn) * 60);
@@ -482,11 +482,11 @@ export default function Home() {
                   {
                     l: 'robots.txt', st: result.hasRobotsTxt ? 'good' : 'warning' as CheckStatus,
                     d: result.hasRobotsTxt ? `Found at ${result.siteUrl.replace(/\/$/, '')}/robots.txt${result.robotsTxtContent?.includes('Sitemap:') ? ' · Sitemap directive present' : ' · No Sitemap directive found'}` : 'No robots.txt file found',
-                    fix: !result.hasRobotsTxt ? 'Add a robots.txt file. In Webflow: Site Settings → SEO → robots.txt. Include: User-agent: * / Allow: / / Sitemap: https://yoursite.com/sitemap.xml' : (!result.robotsTxtContent?.includes('Sitemap:') ? 'Add a Sitemap directive to your robots.txt: Sitemap: https://yoursite.com/sitemap.xml — this helps Google discover your sitemap faster.' : undefined)
+                    fix: !result.hasRobotsTxt ? 'Add a robots.txt file. In Webflow: Site Settings → SEO → robots.txt. Include: User-agent: * / Allow: / / Sitemap: https://yoursite.com/sitemap.xml' : (!result.robotsTxtContent?.includes('Sitemap:') ? 'Add a Sitemap directive to your robots.txt: Sitemap: https://yoursite.com/sitemap.xml this helps Google discover your sitemap faster.' : undefined)
                   },
                   {
                     l: 'HTTPS Security', st: (home?.isHttps ? 'good' : 'error') as CheckStatus,
-                    d: home?.isHttps ? 'Secure HTTPS connection detected' : 'Site not using HTTPS — critical ranking issue!',
+                    d: home?.isHttps ? 'Secure HTTPS connection detected' : 'Site not using HTTPS critical ranking issue!',
                     fix: !home?.isHttps ? 'Enable SSL on your hosting. Webflow includes free SSL via Cloudflare automatically. HTTPS is a confirmed Google ranking factor.' : undefined
                   },
                   {
@@ -538,7 +538,7 @@ export default function Home() {
                       <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', marginBottom: 8, letterSpacing: '.06em', textTransform: 'uppercase' }}>Duplicate Titles Detected</div>
                       {result.summary.duplicateTitles.map((d, i) => (
                         <div key={i} style={{ marginBottom: 8 }}>
-                          <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>"{d.title.slice(0,70)}" — used on:</div>
+                          <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>"{d.title.slice(0,70)}" used on:</div>
                           {d.urls.map((u, j) => <span key={j} className="chip" style={{ display: 'inline-block', marginRight: 4, marginBottom: 3 }}>{SU(u)}</span>)}
                         </div>
                       ))}
@@ -561,7 +561,7 @@ export default function Home() {
                       </tr>))}
                     </tbody>
                   </table>
-                  <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Webflow: <strong>Page Settings → SEO → Description</strong>. Aim for 140-160 characters. Write a compelling summary with your keyword and a call to action (e.g. "Get a free quote today"). Each page needs a unique meta description — duplicate descriptions hurt CTR.</div></div>
+                  <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Webflow: <strong>Page Settings → SEO → Description</strong>. Aim for 140-160 characters. Write a compelling summary with your keyword and a call to action (e.g. "Get a free quote today"). Each page needs a unique meta description duplicate descriptions hurt CTR.</div></div>
                 </div>
               )}
 
@@ -577,7 +577,7 @@ export default function Home() {
                       </tr>))}
                     </tbody>
                   </table>
-                  <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Every page needs exactly <strong>one H1 tag</strong> — usually your main headline. In Webflow: select the heading element → Style panel → change Tag to H1. If you have 2 H1s, change the decorative/secondary one to H2. Your H1 should include your primary keyword naturally.</div></div>
+                  <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Every page needs exactly <strong>one H1 tag</strong> usually your main headline. In Webflow: select the heading element → Style panel → change Tag to H1. If you have 2 H1s, change the decorative/secondary one to H2. Your H1 should include your primary keyword naturally.</div></div>
                 </div>
               )}
 
@@ -625,7 +625,7 @@ export default function Home() {
                       </tr>))}
                     </tbody>
                   </table>
-                  <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Pages under 300 words are considered thin content and tend to rank poorly. Add meaningful content: service descriptions, FAQs, testimonials, location-specific information, or case studies. Quality matters more than quantity — focus on content that genuinely helps your visitors.</div></div>
+                  <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Pages under 300 words are considered thin content and tend to rank poorly. Add meaningful content: service descriptions, FAQs, testimonials, location-specific information, or case studies. Quality matters more than quantity focus on content that genuinely helps your visitors.</div></div>
                 </div>
               )}
 
@@ -640,7 +640,7 @@ export default function Home() {
                   <div className="fix-t">{result.summary.schemaFound.length>0?'Recommended Schema Types to Add':'How to Add Schema Markup'}</div>
                   <div style={{ fontSize:12, color:'#555', lineHeight:1.75 }}>
                     {result.summary.schemaFound.length>0
-                      ? 'Consider adding: LocalBusiness (name, address, phone, opening hours), FAQPage (for FAQ sections — earns FAQ rich snippets), BreadcrumbList (for navigation hierarchy), Review/AggregateRating (for star ratings in search). Validate at search.google.com/test/rich-results.'
+                      ? 'Consider adding: LocalBusiness (name, address, phone, opening hours), FAQPage (for FAQ sections earns FAQ rich snippets), BreadcrumbList (for navigation hierarchy), Review/AggregateRating (for star ratings in search). Validate at search.google.com/test/rich-results.'
                       : 'Add JSON-LD schema to help Google understand your content. In Webflow: Page Settings → Custom Code → Head Code. Start with LocalBusiness schema for your homepage. Find templates at schema.org and validate at search.google.com/test/rich-results.'}
                   </div>
                 </div>

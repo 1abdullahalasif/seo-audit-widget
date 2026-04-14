@@ -67,8 +67,36 @@ export default function Home() {
   useEffect(() => {
     if (!result) return;
     setPsLoading(true);
-    fetch(`/api/pagespeed?url=${encodeURIComponent(result.siteUrl)}`)
-      .then(r => r.ok ? r.json() : null)
+
+    // Call Google PageSpeed API directly from browser — no server timeout issues
+    const encodedUrl = encodeURIComponent(result.siteUrl);
+    const mobileUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=mobile&category=performance`;
+    const desktopUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=desktop&category=performance`;
+
+    Promise.all([fetch(mobileUrl), fetch(desktopUrl)])
+      .then(async ([mRes, dRes]) => {
+        if (!mRes.ok || !dRes.ok) return null;
+        const [mobile, desktop] = await Promise.all([mRes.json(), dRes.json()]);
+        const mc = mobile?.lighthouseResult?.categories?.performance?.score ?? 0;
+        const dc = desktop?.lighthouseResult?.categories?.performance?.score ?? 0;
+        const audits = mobile?.lighthouseResult?.audits ?? {};
+        return {
+          mobileScore: Math.round(mc * 100),
+          desktopScore: Math.round(dc * 100),
+          fcp: audits['first-contentful-paint']?.numericValue ?? 0,
+          lcp: audits['largest-contentful-paint']?.numericValue ?? 0,
+          cls: audits['cumulative-layout-shift']?.numericValue ?? 0,
+          tbt: audits['total-blocking-time']?.numericValue ?? 0,
+          fcpDisplay: audits['first-contentful-paint']?.displayValue ?? '',
+          lcpDisplay: audits['largest-contentful-paint']?.displayValue ?? '',
+          clsDisplay: audits['cumulative-layout-shift']?.displayValue ?? '',
+          tbtDisplay: audits['total-blocking-time']?.displayValue ?? '',
+          opportunities: Object.values(audits as Record<string, {score: number; title: string; description: string; details?: {type: string}}>)
+            .filter(a => a.score !== null && a.score < 0.9 && a.details?.type === 'opportunity')
+            .slice(0, 5)
+            .map(a => ({ title: a.title, description: a.description })),
+        };
+      })
       .then(d => { if (d) setPs(d); })
       .catch(() => {})
       .finally(() => setPsLoading(false));

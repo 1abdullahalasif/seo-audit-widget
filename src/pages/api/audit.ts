@@ -147,8 +147,9 @@ async function getSitemapUrls(baseUrl: string): Promise<{ hasSitemap: boolean; s
       if (!xml.includes('<url>') && !xml.includes('<sitemap>')) continue;
 
       const urls: string[] = [];
-      const locMatches = xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/g);
-      for (const m of locMatches) {
+      const locRegex = /<loc>\s*([^<]+)\s*<\/loc>/g;
+      let m: RegExpExecArray | null;
+      while ((m = locRegex.exec(xml)) !== null) {
         const u = m[1].trim();
         if (u.startsWith('http') && !u.endsWith('.xml')) {
           urls.push(u);

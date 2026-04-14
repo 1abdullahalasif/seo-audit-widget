@@ -273,7 +273,7 @@ async function sendLeadEmail(data: {
   resendKey: string;
 }) {
   try {
-    await fetch('https://api.resend.com/emails', {
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${data.resendKey}`,
@@ -306,7 +306,15 @@ async function sendLeadEmail(data: {
         `,
       }),
     });
-  } catch { /* non-blocking — don't fail audit if email fails */ }
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error('Resend email failed:', response.status, errBody);
+    } else {
+      console.log('Lead email sent successfully for:', data.url);
+    }
+  } catch (err) {
+    console.error('Email send error:', err);
+  }
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

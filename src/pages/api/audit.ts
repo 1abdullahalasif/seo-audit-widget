@@ -98,10 +98,13 @@ async function fetchWithTimeout(url: string, timeout = 10000): Promise<Response 
 
 async function getPageSpeed(url: string): Promise<PageSpeedData | null> {
   try {
+    const psController = new AbortController();
+    const psTimeout = setTimeout(() => psController.abort(), 8000);
     const [mobileRes, desktopRes] = await Promise.all([
-      fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile`),
-      fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=desktop`),
+      fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile&category=performance`, { signal: psController.signal }),
+      fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=desktop&category=performance`, { signal: psController.signal }),
     ]);
+    clearTimeout(psTimeout);
     if (!mobileRes.ok || !desktopRes.ok) return null;
     const [mobile, desktop] = await Promise.all([mobileRes.json(), desktopRes.json()]);
     const mc = mobile?.lighthouseResult?.categories?.performance?.score ?? 0;
@@ -314,7 +317,7 @@ async function sendLeadEmail(data: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'SEO Audit Tool <onboarding@resend.dev>',
+        from: 'Next Wave SEO Audit <noreply@nextwave.nz>',
         to: ['hello@nextwave.nz'],
         subject: `New SEO Audit Lead: ${data.url}`,
         html: `

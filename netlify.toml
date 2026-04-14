@@ -3,7 +3,6 @@
   publish = ".next"
 
 [build.environment]
-  NEXT_PUBLIC_API_URL = "https://seo-audit-backend.onrender.com"
   NODE_VERSION = "18.17.0"
 
 [[plugins]]
@@ -13,7 +12,4 @@
   for = "/*"
   [headers.values]
     X-Frame-Options = "ALLOWALL"
-    Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Accept, Authorization, Origin, X-Requested-With"
-    Access-Control-Max-Age = "86400"
+    Content-Security-Policy = "frame-ancestors *"

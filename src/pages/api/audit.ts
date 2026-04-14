@@ -36,15 +36,6 @@ interface PageData {
   hasDuplicateMeta?: boolean;
 }
 
-interface PageSpeedData {
-  performanceScore: number;
-  fcp: number;
-  lcp: number;
-  cls: number;
-  tbt: number;
-  mobileScore: number;
-  desktopScore: number;
-}
 
 interface SiteAudit {
   siteUrl: string;
@@ -56,7 +47,6 @@ interface SiteAudit {
   sitemapUrl: string | null;
   hasRobotsTxt: boolean;
   robotsTxtContent: string | null;
-  pageSpeed: PageSpeedData | null;
   pages: PageData[];
   summary: {
     titleIssues: { url: string; title: string | null; issue: string; length: number }[];
@@ -96,33 +86,6 @@ async function fetchWithTimeout(url: string, timeout = 10000): Promise<Response 
   }
 }
 
-async function getPageSpeed(url: string): Promise<PageSpeedData | null> {
-  try {
-    const psController = new AbortController();
-    const psTimeout = setTimeout(() => psController.abort(), 8000);
-    const [mobileRes, desktopRes] = await Promise.all([
-      fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile&category=performance`, { signal: psController.signal }),
-      fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=desktop&category=performance`, { signal: psController.signal }),
-    ]);
-    clearTimeout(psTimeout);
-    if (!mobileRes.ok || !desktopRes.ok) return null;
-    const [mobile, desktop] = await Promise.all([mobileRes.json(), desktopRes.json()]);
-    const mc = mobile?.lighthouseResult?.categories?.performance?.score ?? 0;
-    const dc = desktop?.lighthouseResult?.categories?.performance?.score ?? 0;
-    const audits = mobile?.lighthouseResult?.audits ?? {};
-    return {
-      performanceScore: Math.round(mc * 100),
-      mobileScore: Math.round(mc * 100),
-      desktopScore: Math.round(dc * 100),
-      fcp: audits['first-contentful-paint']?.numericValue ?? 0,
-      lcp: audits['largest-contentful-paint']?.numericValue ?? 0,
-      cls: audits['cumulative-layout-shift']?.numericValue ?? 0,
-      tbt: audits['total-blocking-time']?.numericValue ?? 0,
-    };
-  } catch {
-    return null;
-  }
-}
 
 async function getSitemapUrls(baseUrl: string): Promise<{ hasSitemap: boolean; sitemapUrl: string | null; urls: string[] }> {
   const base = new URL(baseUrl);
@@ -367,11 +330,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const finalUrl = homeRes.url || targetUrl;
   const homeData = analysePage(finalUrl, homeHtml);
 
-  // Run parallel initial tasks
-  const [sitemapData, robotsData, pageSpeedData, brokenLinksData] = await Promise.all([
+  // Run parallel initial tasks (pagespeed is handled separately by browser)
+  const [sitemapData, robotsData, brokenLinksData] = await Promise.all([
     getSitemapUrls(finalUrl),
     getRobotsTxt(finalUrl),
-    getPageSpeed(finalUrl),
     checkBrokenLinks(finalUrl, homeHtml),
   ]);
   homeData.brokenLinks = brokenLinksData;
@@ -454,7 +416,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (robotsData.hasRobotsTxt) score += 4;
   if (brokenLinksSummary.length === 0) score += 4;
   if (duplicateTitles.length === 0) score += 4;
-  if (pageSpeedData && pageSpeedData.mobileScore >= 50) score += 4;
 
   const totalIssues = titleIssues.length + metaDescIssues.length + h1Issues.length + missingAltImages.length + brokenLinksSummary.length;
   const generatedAt = new Date().toISOString();
@@ -466,7 +427,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     sitemapUrl: sitemapData.sitemapUrl,
     hasRobotsTxt: robotsData.hasRobotsTxt,
     robotsTxtContent: robotsData.content,
-    pageSpeed: pageSpeedData,
     pages: allPages,
     summary: {
       titleIssues, duplicateTitles, metaDescIssues, duplicateMetas,

@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/pages/api/audit.ts": {
+      "maxDuration": 60
+    },
+    "src/pages/api/pagespeed.ts": {
+      "maxDuration": 60
+    }
+  }
+}

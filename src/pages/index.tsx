@@ -1,78 +1,102 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import Head from 'next/head';
 
 type CheckStatus = 'good' | 'warning' | 'error';
 
-interface Check {
-  status: CheckStatus;
-  recommendation: string;
-  howToFix?: string;
-  [key: string]: unknown;
+interface PageData {
+  url: string;
+  title: string | null;
+  titleLength: number;
+  titleStatus: CheckStatus;
+  metaDescription: string | null;
+  metaDescLength: number;
+  metaDescStatus: CheckStatus;
+  h1Tags: string[];
+  h1Status: CheckStatus;
+  h2Count: number;
+  imagesTotal: number;
+  imagesMissingAlt: { src: string; context: string }[];
+  canonical: string | null;
+  robots: string | null;
+  robotsStatus: CheckStatus;
+  viewport: string | null;
+  wordCount: number;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  ogImage: string | null;
+  schemaTypes: string[];
+  isHttps: boolean;
 }
 
-interface AuditResult {
-  url: string;
+interface SiteAudit {
+  siteUrl: string;
   name: string;
   score: number;
-  checks: {
-    title: Check & { value: string | null };
-    metaDescription: Check & { value: string | null };
-    h1: Check & { count: number; values: string[] };
-    h2: Check & { count: number };
-    images: Check & { total: number; missingAlt: number };
-    canonical: Check & { value: string | null };
-    robots: Check & { value: string | null };
-    wordCount: Check & { count: number };
-    httpsUsed: Check & { value: boolean };
-    viewport: Check & { value: string | null };
-    ogTags: Check & { title: string | null; description: string | null; image: string | null };
-    schemaMarkup: Check & { found: boolean };
+  pagesAudited: number;
+  pages: PageData[];
+  summary: {
+    titleIssues: { url: string; title: string | null; issue: string; length: number }[];
+    metaDescIssues: { url: string; desc: string | null; issue: string; length: number }[];
+    h1Issues: { url: string; h1s: string[]; issue: string }[];
+    missingAltImages: { pageUrl: string; imgSrc: string; context: string }[];
+    schemaFound: { url: string; types: string[] }[];
+    httpsIssues: string[];
+    canonicalIssues: string[];
   };
   generatedAt: string;
 }
 
-const statusBadge = (status: CheckStatus) => {
-  const map = {
-    good: { bg: '#dcfce7', color: '#15803d', label: 'GOOD' },
-    warning: { bg: '#fef9c3', color: '#a16207', label: 'WARNING' },
-    error: { bg: '#fee2e2', color: '#b91c1c', label: 'NEEDS FIX' },
-  };
-  return map[status];
+const scoreGrade = (s: number) => s >= 90 ? 'A+' : s >= 80 ? 'A' : s >= 70 ? 'B' : s >= 55 ? 'C' : s >= 40 ? 'D' : 'F';
+const scoreColor = (s: number) => s >= 70 ? '#15803d' : s >= 40 ? '#b45309' : '#b91c1c';
+const scoreLabel = (s: number) => s >= 70 ? 'Good SEO health. A few tweaks could make it great.' : s >= 40 ? 'Moderate. Several areas need attention.' : 'Needs significant work to rank in search.';
+
+const badge = (status: CheckStatus) => ({
+  good: { bg: '#dcfce7', color: '#15803d', text: 'GOOD' },
+  warning: { bg: '#fef9c3', color: '#a16207', text: 'WARNING' },
+  error: { bg: '#fee2e2', color: '#b91c1c', text: 'FIX NEEDED' },
+}[status]);
+
+const icon = (status: CheckStatus) => ({ good: '✓', warning: '!', error: '✗' }[status]);
+
+const shortUrl = (u: string) => {
+  try { const p = new URL(u); return p.hostname + (p.pathname !== '/' ? p.pathname.slice(0, 30) : ''); }
+  catch { return u.slice(0, 40); }
 };
 
-const statusIcon = (status: CheckStatus) =>
-  ({ good: '\u2713', warning: '\u25B2', error: '\u2715' }[status]);
-
-const scoreColor = (score: number) =>
-  score >= 70 ? '#16a34a' : score >= 40 ? '#ca8a04' : '#dc2626';
-
-const scoreGrade = (score: number) =>
-  score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
-
-const scoreLabel = (score: number) =>
-  score >= 70
-    ? 'Good SEO health. A few tweaks could make it great.'
-    : score >= 40
-    ? 'Moderate. Several areas need improvement.'
-    : 'Needs significant work to rank well in search.';
+// Auto-resize when embedded in iframe
+if (typeof window !== "undefined") {
+  const reportHeight = () => {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "nw-seo-height", height: document.body.scrollHeight }, "*");
+    }
+  };
+  if (document.readyState === "complete") {
+    setTimeout(reportHeight, 300);
+  } else {
+    window.addEventListener("load", () => setTimeout(reportHeight, 300));
+  }
+  const obs = typeof MutationObserver !== "undefined"
+    ? new MutationObserver(() => setTimeout(reportHeight, 100))
+    : null;
+  if (obs) obs.observe(document.body, { childList: true, subtree: true });
+}
 
 export default function Home() {
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AuditResult | null>(null);
-  const reportRef = useRef<HTMLDivElement>(null);
+  const [result, setResult] = useState<SiteAudit | null>(null);
 
   const handleSubmit = async () => {
-    if (!url || !name || !email) {
-      setError('Please fill in all fields.');
-      return;
-    }
-    setError(null);
-    setLoading(true);
-    setResult(null);
+    if (!url || !name || !email) { setError('Please fill in all fields.'); return; }
+    setError(null); setLoading(true); setResult(null);
+    const msgs = ['Fetching your homepage...', 'Crawling internal pages...', 'Analysing meta tags...', 'Checking images and schema...', 'Building your report...'];
+    let i = 0;
+    setLoadingMsg(msgs[0]);
+    const interval = setInterval(() => { i = Math.min(i + 1, msgs.length - 1); setLoadingMsg(msgs[i]); }, 2800);
     try {
       const res = await fetch('/api/audit', {
         method: 'POST',
@@ -80,434 +104,449 @@ export default function Home() {
         body: JSON.stringify({ url, name, email }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Something went wrong. Please try again.');
-      } else {
-        setResult(data);
-      }
-    } catch {
-      setError('Network error. Please check your connection and try again.');
-    } finally {
-      setLoading(false);
-    }
+      if (!res.ok) setError(data.error || 'Something went wrong. Please try again.');
+      else setResult(data);
+    } catch { setError('Network error. Please check your connection and try again.'); }
+    finally { clearInterval(interval); setLoading(false); setLoadingMsg(''); }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const checkItems = result
-    ? [
-        {
-          label: 'Title Tag',
-          category: 'On-Page SEO',
-          check: result.checks.title,
-          detail: result.checks.title.value ? '"' + result.checks.title.value + '"' : 'No title tag found',
-          howToFix: result.checks.title.status !== 'good'
-            ? 'In your CMS or HTML, add a <title> tag inside the <head> section. For Webflow: go to Page Settings > SEO > Title. Keep it between 50-60 characters and include your primary keyword near the beginning.'
-            : undefined,
-        },
-        {
-          label: 'Meta Description',
-          category: 'On-Page SEO',
-          check: result.checks.metaDescription,
-          detail: result.checks.metaDescription.value
-            ? result.checks.metaDescription.value.slice(0, 100) + (result.checks.metaDescription.value.length > 100 ? '...' : '')
-            : 'No meta description found',
-          howToFix: result.checks.metaDescription.status !== 'good'
-            ? 'Add a meta description tag: <meta name="description" content="Your description here">. For Webflow: Page Settings > SEO > Description. Write 140-160 characters that summarise the page and include a call to action.'
-            : undefined,
-        },
-        {
-          label: 'H1 Heading',
-          category: 'On-Page SEO',
-          check: result.checks.h1,
-          detail: result.checks.h1.count + ' H1 tag(s) found' + (result.checks.h1.values[0] ? ': "' + result.checks.h1.values[0].slice(0, 60) + '"' : ''),
-          howToFix: result.checks.h1.status !== 'good'
-            ? result.checks.h1.count === 0
-              ? 'Add exactly one H1 heading to your page. It should be the main headline and contain your primary keyword. In Webflow, set a text element heading style to H1.'
-              : 'You have multiple H1 tags. Keep only one — usually the main page headline. Change the others to H2 or H3 in your page editor.'
-            : undefined,
-        },
-        {
-          label: 'H2 Subheadings',
-          category: 'On-Page SEO',
-          check: result.checks.h2,
-          detail: result.checks.h2.count + ' H2 subheading(s) found',
-          howToFix: result.checks.h2.status !== 'good'
-            ? 'Add H2 tags to break up your content into sections. Each H2 should describe a key topic on the page. Good structure: H1 (page title) > H2 (section headings) > H3 (subsections).'
-            : undefined,
-        },
-        {
-          label: 'Image Alt Text',
-          category: 'On-Page SEO',
-          check: result.checks.images,
-          detail: result.checks.images.total + ' images found, ' + result.checks.images.missingAlt + ' missing alt text',
-          howToFix: result.checks.images.status !== 'good'
-            ? 'Add descriptive alt text to every image. In Webflow: click each image > Element Settings > Alt Text. Write a natural description like "Red Toyota Camry 2023 side view". Avoid keyword stuffing.'
-            : undefined,
-        },
-        {
-          label: 'HTTPS Security',
-          category: 'Technical',
-          check: result.checks.httpsUsed,
-          detail: result.checks.httpsUsed.value ? 'Site is served over HTTPS' : 'Site is NOT using HTTPS',
-          howToFix: result.checks.httpsUsed.status !== 'good'
-            ? 'Enable SSL/HTTPS on your hosting provider. Most hosts offer free SSL via Lets Encrypt. In Webflow this is automatic. Without HTTPS, Google may rank your site lower and show a "Not Secure" warning to visitors.'
-            : undefined,
-        },
-        {
-          label: 'Mobile Viewport',
-          category: 'Technical',
-          check: result.checks.viewport,
-          detail: result.checks.viewport.value ? 'Viewport meta tag present' : 'No viewport meta tag found',
-          howToFix: result.checks.viewport.status !== 'good'
-            ? 'Add this to your HTML <head>: <meta name="viewport" content="width=device-width, initial-scale=1">. This tells mobile browsers how to scale the page. Without it, Google may penalise your mobile rankings.'
-            : undefined,
-        },
-        {
-          label: 'Canonical Tag',
-          category: 'Technical',
-          check: result.checks.canonical,
-          detail: result.checks.canonical.value ? 'Canonical: ' + result.checks.canonical.value.slice(0, 60) : 'No canonical tag found',
-          howToFix: result.checks.canonical.status !== 'good'
-            ? 'Add a canonical tag to tell Google the preferred URL of this page: <link rel="canonical" href="https://yoursite.com/page">. In Webflow, go to Page Settings > SEO > Canonical Tag. This prevents duplicate content penalties.'
-            : undefined,
-        },
-        {
-          label: 'Robots Meta Tag',
-          category: 'Technical',
-          check: result.checks.robots,
-          detail: result.checks.robots.value ? 'Robots: ' + result.checks.robots.value : 'No robots meta tag set',
-          howToFix: result.checks.robots.status === 'error'
-            ? 'URGENT: Your page has noindex set which means Google will not index this page. To fix: remove the <meta name="robots" content="noindex"> tag, or in Webflow uncheck "Exclude from search results" in Page Settings.'
-            : result.checks.robots.status === 'warning'
-            ? 'Consider adding: <meta name="robots" content="index, follow"> to explicitly tell search engines to index this page and follow its links.'
-            : undefined,
-        },
-        {
-          label: 'Word Count',
-          category: 'Content',
-          check: result.checks.wordCount,
-          detail: result.checks.wordCount.count + ' words detected on page',
-          howToFix: result.checks.wordCount.status !== 'good'
-            ? 'Add more content to your page. Google favours pages with at least 300 words of meaningful content. Write about your services, location, benefits, FAQs, or customer testimonials. Thin content pages tend to rank poorly.'
-            : undefined,
-        },
-        {
-          label: 'Open Graph Tags',
-          category: 'Social',
-          check: result.checks.ogTags,
-          detail: result.checks.ogTags.title
-            ? 'OG title, description and image are all set'
-            : 'Missing: ' + [!result.checks.ogTags.title && 'og:title', !result.checks.ogTags.description && 'og:description', !result.checks.ogTags.image && 'og:image'].filter(Boolean).join(', '),
-          howToFix: result.checks.ogTags.status !== 'good'
-            ? 'Add Open Graph meta tags to control how your page looks when shared on Facebook, LinkedIn etc. In Webflow: Page Settings > Open Graph. Add: og:title, og:description (max 200 chars), and og:image (1200x630px recommended).'
-            : undefined,
-        },
-        {
-          label: 'Schema Markup',
-          category: 'Technical',
-          check: result.checks.schemaMarkup,
-          detail: result.checks.schemaMarkup.found ? 'JSON-LD structured data detected' : 'No structured data found',
-          howToFix: result.checks.schemaMarkup.status !== 'good'
-            ? 'Add JSON-LD Schema markup to help Google understand your content. For a local business: add LocalBusiness schema. For a product page: add Product schema. In Webflow, paste the JSON-LD script in Page Settings > Custom Code > Head. Use schema.org or Google\'s Rich Results Test to validate.'
-            : undefined,
-        },
-      ]
-    : [];
-
-  const good = checkItems.filter((c) => c.check.status === 'good').length;
-  const warn = checkItems.filter((c) => c.check.status === 'warning').length;
-  const err = checkItems.filter((c) => c.check.status === 'error').length;
-  const fixItems = checkItems.filter((c) => c.check.status !== 'good');
-
-  const categories = ['On-Page SEO', 'Technical', 'Content', 'Social'];
+  const home = result?.pages[0];
+  const good = result ? result.pages.reduce((a, p) => a + ([p.titleStatus, p.metaDescStatus, p.h1Status, p.robotsStatus].filter(s => s === 'good').length), 0) : 0;
 
   return (
     <>
       <Head>
         <title>Next Wave SEO Audit Tool</title>
-        <meta name="description" content="Free SEO audit tool by Next Wave, New Zealand AI-powered digital marketing agency." />
+        <meta name="description" content="Free SEO audit tool by Next Wave NZ" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,600;0,700;1,300&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Fraunces:wght@300;400;600&display=swap" rel="stylesheet" />
         <style>{`
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Plus Jakarta Sans', sans-serif; background: #f8f7f4; color: #1a1a1a; font-weight: 400; }
-          input, button { font-family: 'Plus Jakarta Sans', sans-serif; }
-          input:focus { outline: 2px solid #e8693a; outline-offset: -2px; border-color: #e8693a !important; }
-          @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-          @keyframes spin { to { transform: rotate(360deg); } }
-          .fade-in { animation: fadeUp 0.45s ease forwards; }
-          .check-row:hover { background: #fafaf8 !important; }
-          .submit-btn:hover:not(:disabled) { background: #c95a2a !important; }
-          .submit-btn { transition: background 0.2s; }
-          .cta-btn:hover { background: #1a1a1a !important; }
-          .cta-btn { transition: background 0.2s; }
-          .print-btn:hover { background: #e5e2dc !important; }
-          .print-btn { transition: background 0.2s; }
-          @media (max-width: 640px) {
-            .feature-grid { grid-template-columns: 1fr !important; }
-            .score-row { flex-direction: column !important; gap: 20px !important; }
-            .cat-grid { grid-template-columns: 1fr 1fr !important; }
-          }
-          @media print {
-            .no-print { display: none !important; }
-            body { background: white; }
-            .print-section { page-break-inside: avoid; }
-          }
+          *{box-sizing:border-box;margin:0;padding:0}
+          body{font-family:'Plus Jakarta Sans',sans-serif;background:#f7f6f2;color:#1a1a1a;font-size:14px;font-weight:400;line-height:1.5}
+          input,button,textarea{font-family:'Plus Jakarta Sans',sans-serif}
+          input:focus{outline:2px solid #e8693a;outline-offset:-2px;border-color:#e8693a!important}
+          @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+          @keyframes spin{to{transform:rotate(360deg)}}
+          @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+          .fade{animation:fadeUp .4s ease forwards}
+          .card{background:#fff;border-radius:14px;border:1px solid #e8e4dc;overflow:hidden;margin-bottom:14px}
+          .card-head{padding:14px 20px;border-bottom:1px solid #f0ece5;background:#faf9f6;display:flex;align-items:center;justify-content:space-between}
+          .card-body{padding:0}
+          .row{padding:14px 20px;border-bottom:1px solid #f5f2ec;display:flex;align-items:flex-start;gap:10}
+          .row:last-child{border-bottom:none}
+          .row:hover{background:#faf9f6}
+          .badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;padding:2px 7px;border-radius:99px;text-transform:uppercase}
+          .fix-box{background:#fef6f2;border-left:3px solid #e8693a;border-radius:0 6px 6px 0;padding:10px 12px;margin-top:8px}
+          .fix-title{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#e8693a;margin-bottom:4px}
+          .tag{display:inline-block;background:#f0ece5;color:#555;font-size:10px;padding:2px 8px;border-radius:4px;margin:2px;font-family:monospace}
+          .submit-btn{width:100%;padding:13px;background:#e8693a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.02em;transition:background .15s}
+          .submit-btn:hover:not(:disabled){background:#c95a2a}
+          .submit-btn:disabled{background:#bbb;cursor:not-allowed}
+          .print-btn{padding:9px 16px;background:#fff;border:1.5px solid #e0dcd5;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#555;transition:background .15s}
+          .print-btn:hover{background:#f5f2ec}
+          .url-chip{display:inline-block;background:#f0ece5;color:#555;font-size:11px;padding:2px 8px;border-radius:4px;font-family:monospace;word-break:break-all;max-width:100%}
+          table{width:100%;border-collapse:collapse;font-size:12px}
+          th{text-align:left;padding:8px 12px;background:#faf9f6;color:#888;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #ede9e1}
+          td{padding:10px 12px;border-bottom:1px solid #f5f2ec;vertical-align:top}
+          tr:last-child td{border-bottom:none}
+          tr:hover td{background:#faf9f6}
+          @media(max-width:600px){.score-flex{flex-direction:column!important;gap:16px!important}.cat-grid{grid-template-columns:1fr 1fr!important}}
+          @media print{.no-print{display:none!important}body{background:#fff}.card{break-inside:avoid}}
         `}</style>
       </Head>
 
-      <div style={{ minHeight: '100vh', background: '#f8f7f4' }}>
+      <div style={{ minHeight: '100vh', background: '#f7f6f2' }}>
 
-        {/* Header */}
-        <header className="no-print" style={{ background: '#111', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52 }}>
-          <span style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 600, fontSize: 13, color: '#fff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Next Wave <span style={{ color: '#e8693a', margin: '0 6px' }}>|</span> SEO Audit
+        {/* Top bar */}
+        <div className="no-print" style={{ background: '#111', padding: '0 24px', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ color: '#fff', fontWeight: 600, fontSize: 12, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+            Next Wave <span style={{ color: '#e8693a', margin: '0 5px' }}>|</span> SEO Audit
           </span>
-          <a href="https://www.nextwave.nz" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#888', textDecoration: 'none', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            nextwave.nz
-          </a>
-        </header>
+          <a href="https://www.nextwave.nz" target="_blank" rel="noopener noreferrer" style={{ color: '#777', fontSize: 11, textDecoration: 'none', letterSpacing: '.06em', textTransform: 'uppercase' }}>nextwave.nz</a>
+        </div>
 
-        <main style={{ maxWidth: 780, margin: '0 auto', padding: '44px 20px 80px' }}>
-          {!result ? (
-            <div className="fade-in">
-              {/* Hero */}
-              <div style={{ textAlign: 'center', marginBottom: 44 }}>
-                <div style={{ display: 'inline-block', background: '#e8693a', color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', padding: '4px 12px', borderRadius: 99, marginBottom: 18, textTransform: 'uppercase' }}>
-                  Free Tool
-                </div>
-                <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 'clamp(30px, 5vw, 48px)', fontWeight: 300, lineHeight: 1.15, color: '#111', marginBottom: 14, letterSpacing: '-0.01em' }}>
+        <main style={{ maxWidth: 820, margin: '0 auto', padding: '36px 16px 80px' }}>
+
+          {/* ── FORM ── */}
+          {!result && (
+            <div className="fade">
+              <div style={{ textAlign: 'center', marginBottom: 36 }}>
+                <span style={{ display: 'inline-block', background: '#e8693a', color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: '.14em', padding: '4px 12px', borderRadius: 99, marginBottom: 14, textTransform: 'uppercase' }}>Free Tool</span>
+                <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 'clamp(26px,5vw,44px)', fontWeight: 300, lineHeight: 1.15, color: '#111', marginBottom: 12 }}>
                   Website SEO Audit
                 </h1>
-                <p style={{ color: '#666', fontSize: 15, maxWidth: 460, margin: '0 auto', lineHeight: 1.75, fontWeight: 400 }}>
-                  Scan your website for SEO issues and get a detailed report with specific fixes — in seconds.
+                <p style={{ color: '#666', fontSize: 15, maxWidth: 440, margin: '0 auto', lineHeight: 1.8, fontWeight: 300 }}>
+                  Scan your website for SEO issues. Get a detailed page-by-page report with specific fixes.
                 </p>
               </div>
 
-              {/* Form */}
-              <div style={{ background: '#fff', borderRadius: 16, padding: '36px 36px 32px', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 20px rgba(0,0,0,0.04)', border: '1px solid #eae7e0' }}>
-                <h2 style={{ fontFamily: 'Fraunces, serif', fontSize: 19, fontWeight: 400, marginBottom: 24, color: '#111', letterSpacing: '-0.01em' }}>
-                  Free SEO Audit Tool
-                </h2>
+              <div className="card" style={{ padding: '32px 28px 28px' }}>
+                <h2 style={{ fontFamily: 'Fraunces, serif', fontSize: 18, fontWeight: 400, marginBottom: 22, color: '#111' }}>Start Your Free Audit</h2>
 
                 {[
                   { label: 'Website URL', placeholder: 'https://yourbusiness.co.nz', value: url, setter: setUrl, type: 'text' },
                   { label: 'Your Name', placeholder: 'Jane Smith', value: name, setter: setName, type: 'text' },
                   { label: 'Email Address', placeholder: 'jane@yourbusiness.co.nz', value: email, setter: setEmail, type: 'email' },
-                ].map((field) => (
-                  <div key={field.label} style={{ marginBottom: 16 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#444', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                      {field.label} <span style={{ color: '#e8693a' }}>*</span>
+                ].map(f => (
+                  <div key={f.label} style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#555', marginBottom: 5, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                      {f.label} <span style={{ color: '#e8693a' }}>*</span>
                     </label>
-                    <input
-                      type={field.type}
-                      placeholder={field.placeholder}
-                      value={field.value}
-                      onChange={(e) => field.setter(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                      style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e5e0d8', borderRadius: 8, fontSize: 14, color: '#111', background: '#fdfcfb', transition: 'border-color 0.15s' }}
-                    />
+                    <input type={f.type} placeholder={f.placeholder} value={f.value}
+                      onChange={e => f.setter(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                      style={{ width: '100%', padding: '11px 13px', border: '1.5px solid #e5e0d8', borderRadius: 8, fontSize: 14, color: '#111', background: '#fdfcfb' }} />
                   </div>
                 ))}
 
-                {error && (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '11px 14px', color: '#b91c1c', marginBottom: 16, fontSize: 13, fontWeight: 500 }}>
-                    {error}
-                  </div>
-                )}
+                {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', color: '#b91c1c', marginBottom: 14, fontSize: 13, fontWeight: 500 }}>{error}</div>}
 
-                <button
-                  className="submit-btn"
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  style={{ width: '100%', padding: '13px', background: loading ? '#bbb' : '#e8693a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}
-                >
+                <button className="submit-btn" onClick={handleSubmit} disabled={loading}>
                   {loading ? (
-                    <>
-                      <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.35)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                      Analysing your website...
-                    </>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.35)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .7s linear infinite' }} />
+                      {loadingMsg || 'Analysing...'}
+                    </span>
                   ) : 'Start Free Audit'}
                 </button>
+
+                <p style={{ fontSize: 11, color: '#aaa', marginTop: 12, textAlign: 'center' }}>
+                  We crawl up to 5 pages of your site for a comprehensive report.
+                </p>
               </div>
 
-              {/* Features */}
-              <div className="feature-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 24 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginTop: 14 }} className="cat-grid">
                 {[
-                  { icon: '&#128202;', title: '12 SEO Checks', desc: 'Title, meta, headings, images, HTTPS, schema and more' },
-                  { icon: '&#128161;', title: 'How-to-Fix Guides', desc: 'Step-by-step instructions for every issue found' },
-                  { icon: '&#128221;', title: 'Printable Report', desc: 'Save or print your full audit report as PDF' },
-                ].map((f) => (
-                  <div key={f.title} style={{ background: '#fff', borderRadius: 12, padding: '18px 16px', border: '1px solid #eae7e0', textAlign: 'center' }}>
-                    <div style={{ fontSize: 22, marginBottom: 8 }} dangerouslySetInnerHTML={{ __html: f.icon }} />
-                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4, color: '#111', letterSpacing: '0.01em' }}>{f.title}</div>
-                    <div style={{ fontSize: 11, color: '#888', lineHeight: 1.6 }}>{f.desc}</div>
+                  { icon: '📄', t: 'Page-by-Page Detail', d: 'See issues on every page crawled, not just the homepage' },
+                  { icon: '🖼', t: 'Image Alt Report', d: 'Every image missing alt text listed by URL' },
+                  { icon: '🔧', t: 'How-to-Fix Guides', d: 'Step-by-step instructions for every issue found' },
+                ].map(f => (
+                  <div key={f.t} style={{ background: '#fff', borderRadius: 10, padding: '16px 14px', border: '1px solid #e8e4dc', textAlign: 'center' }}>
+                    <div style={{ fontSize: 20, marginBottom: 6 }}>{f.icon}</div>
+                    <div style={{ fontWeight: 600, fontSize: 11, marginBottom: 4, color: '#111' }}>{f.t}</div>
+                    <div style={{ fontSize: 11, color: '#999', lineHeight: 1.6 }}>{f.d}</div>
                   </div>
                 ))}
               </div>
             </div>
+          )}
 
-          ) : (
-            <div className="fade-in" ref={reportRef}>
+          {/* ── REPORT ── */}
+          {result && (
+            <div className="fade">
 
               {/* Report header */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 12 }} className="print-section">
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 22, flexWrap: 'wrap', gap: 10 }}>
                 <div>
-                  <div style={{ display: 'inline-block', background: '#e8693a', color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', padding: '4px 12px', borderRadius: 99, marginBottom: 12, textTransform: 'uppercase' }}>
-                    Audit Complete
-                  </div>
-                  <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 'clamp(22px, 4vw, 32px)', fontWeight: 400, color: '#111', marginBottom: 6, letterSpacing: '-0.01em' }}>
-                    SEO Audit Report
-                  </h1>
-                  <p style={{ color: '#666', fontSize: 13, lineHeight: 1.6 }}>
-                    <strong style={{ color: '#111', fontWeight: 600 }}>{result.url}</strong>
-                    <br />
-                    Generated {new Date(result.generatedAt).toLocaleString('en-NZ')} — Prepared for {result.name}
+                  <span style={{ display: 'inline-block', background: '#e8693a', color: '#fff', fontSize: 9, fontWeight: 700, letterSpacing: '.14em', padding: '3px 10px', borderRadius: 99, marginBottom: 10, textTransform: 'uppercase' }}>Audit Complete</span>
+                  <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 'clamp(20px,4vw,30px)', fontWeight: 400, color: '#111', marginBottom: 5 }}>SEO Audit Report</h1>
+                  <p style={{ color: '#777', fontSize: 12, lineHeight: 1.7 }}>
+                    <strong style={{ color: '#111' }}>{result.siteUrl}</strong><br />
+                    {result.pagesAudited} pages audited &middot; Generated {new Date(result.generatedAt).toLocaleString('en-NZ')} &middot; For {result.name}
                   </p>
                 </div>
-                <div className="no-print" style={{ display: 'flex', gap: 8 }}>
-                  <button className="print-btn" onClick={handlePrint} style={{ padding: '9px 18px', background: '#fff', border: '1.5px solid #e0dcd5', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#444', letterSpacing: '0.03em' }}>
-                    Print / Save PDF
-                  </button>
-                  <button onClick={() => { setResult(null); setUrl(''); setName(''); setEmail(''); }} style={{ padding: '9px 18px', background: 'transparent', border: '1.5px solid #e0dcd5', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#888', letterSpacing: '0.03em' }}>
-                    New Audit
-                  </button>
+                <div className="no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="print-btn" onClick={() => window.print()}>Print / Save PDF</button>
+                  <button className="print-btn" onClick={() => { setResult(null); setUrl(''); setName(''); setEmail(''); }}>New Audit</button>
                 </div>
               </div>
 
-              {/* Score card */}
-              <div className="print-section" style={{ background: '#111', borderRadius: 16, padding: '32px 36px', marginBottom: 16, color: '#fff' }}>
-                <div className="score-row" style={{ display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
-                  <div style={{ textAlign: 'center', minWidth: 100 }}>
-                    <div style={{ fontFamily: 'Fraunces, serif', fontSize: 72, fontWeight: 300, color: scoreColor(result.score), lineHeight: 1 }}>
-                      {scoreGrade(result.score)}
+              {/* Score */}
+              <div className="card" style={{ background: '#111', borderRadius: 14 }}>
+                <div style={{ padding: '28px 28px' }}>
+                  <div className="score-flex" style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
+                    <div style={{ textAlign: 'center', minWidth: 90 }}>
+                      <div style={{ fontFamily: 'Fraunces, serif', fontSize: 68, fontWeight: 300, color: scoreColor(result.score), lineHeight: 1 }}>{scoreGrade(result.score)}</div>
+                      <div style={{ fontSize: 10, color: '#555', letterSpacing: '.1em', textTransform: 'uppercase', marginTop: 2 }}>{result.score}/100</div>
                     </div>
-                    <div style={{ fontSize: 11, color: '#666', letterSpacing: '0.1em', marginTop: 4, textTransform: 'uppercase' }}>
-                      {result.score}/100
-                    </div>
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ fontSize: 15, fontWeight: 400, marginBottom: 14, color: '#e8e8e8', lineHeight: 1.5 }}>
-                      {scoreLabel(result.score)}
-                    </div>
-                    <div style={{ height: 6, background: '#2a2a2a', borderRadius: 99, overflow: 'hidden', marginBottom: 18 }}>
-                      <div style={{ height: '100%', width: result.score + '%', background: scoreColor(result.score), borderRadius: 99, transition: 'width 1s ease' }} />
-                    </div>
-                    <div className="cat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                      {[
-                        { label: 'Passed', count: good, color: '#16a34a' },
-                        { label: 'Warnings', count: warn, color: '#ca8a04' },
-                        { label: 'Errors', count: err, color: '#dc2626' },
-                      ].map((s) => (
-                        <div key={s.label} style={{ background: '#1c1c1c', borderRadius: 10, padding: '12px 8px', textAlign: 'center' }}>
-                          <div style={{ fontFamily: 'Fraunces, serif', fontSize: 28, fontWeight: 300, color: s.color, lineHeight: 1 }}>{s.count}</div>
-                          <div style={{ fontSize: 10, color: '#666', letterSpacing: '0.08em', marginTop: 4, textTransform: 'uppercase' }}>{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Category summary */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 20 }} className="print-section cat-grid">
-                {categories.map((cat) => {
-                  const catItems = checkItems.filter((c) => c.category === cat);
-                  const catGood = catItems.filter((c) => c.check.status === 'good').length;
-                  const catTotal = catItems.length;
-                  const allGood = catGood === catTotal;
-                  const anyError = catItems.some((c) => c.check.status === 'error');
-                  return (
-                    <div key={cat} style={{ background: '#fff', border: '1.5px solid ' + (anyError ? '#fecaca' : allGood ? '#bbf7d0' : '#fde68a'), borderRadius: 12, padding: '14px 16px' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: anyError ? '#b91c1c' : allGood ? '#15803d' : '#a16207', marginBottom: 4 }}>{cat}</div>
-                      <div style={{ fontFamily: 'Fraunces, serif', fontSize: 22, fontWeight: 300, color: '#111' }}>{catGood}/{catTotal}</div>
-                      <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>checks passed</div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Detailed checks by category */}
-              {categories.map((cat) => {
-                const catItems = checkItems.filter((c) => c.category === cat);
-                return (
-                  <div key={cat} className="print-section" style={{ background: '#fff', borderRadius: 16, border: '1px solid #eae7e0', overflow: 'hidden', marginBottom: 16 }}>
-                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #f0ede7', background: '#fafaf8' }}>
-                      <h2 style={{ fontFamily: 'Fraunces, serif', fontSize: 15, fontWeight: 400, color: '#111', letterSpacing: '-0.01em' }}>{cat}</h2>
-                    </div>
-                    {catItems.map((item, i) => {
-                      const badge = statusBadge(item.check.status);
-                      return (
-                        <div key={item.label} className="check-row" style={{ padding: '18px 24px', borderBottom: i < catItems.length - 1 ? '1px solid #f5f3ef' : 'none', background: '#fff', transition: 'background 0.1s' }}>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                            <span style={{ width: 22, height: 22, borderRadius: '50%', background: badge.bg, color: badge.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>
-                              {statusIcon(item.check.status)}
-                            </span>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                                <span style={{ fontWeight: 600, fontSize: 13, color: '#111' }}>{item.label}</span>
-                                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', padding: '2px 7px', borderRadius: 99, background: badge.bg, color: badge.color, textTransform: 'uppercase' }}>
-                                  {badge.label}
-                                </span>
-                              </div>
-                              <div style={{ fontSize: 12, color: '#777', marginBottom: item.howToFix ? 8 : 0, lineHeight: 1.6 }}>{item.detail}</div>
-                              <div style={{ fontSize: 12, color: '#444', marginBottom: item.howToFix ? 8 : 0, lineHeight: 1.65 }}>{item.check.recommendation}</div>
-                              {item.howToFix && (
-                                <div style={{ background: '#f8f6f2', borderLeft: '3px solid #e8693a', borderRadius: '0 6px 6px 0', padding: '10px 12px', marginTop: 8 }}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#e8693a', marginBottom: 4 }}>How to Fix</div>
-                                  <div style={{ fontSize: 12, color: '#555', lineHeight: 1.7 }}>{item.howToFix}</div>
-                                </div>
-                              )}
-                            </div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontSize: 14, color: '#ccc', marginBottom: 12, lineHeight: 1.6, fontWeight: 300 }}>{scoreLabel(result.score)}</div>
+                      <div style={{ height: 5, background: '#222', borderRadius: 99, overflow: 'hidden', marginBottom: 16 }}>
+                        <div style={{ height: '100%', width: result.score + '%', background: scoreColor(result.score), borderRadius: 99 }} />
+                      </div>
+                      <div className="cat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                        {[
+                          { l: 'Pages Audited', v: result.pagesAudited, c: '#888' },
+                          { l: 'Issues Found', v: result.summary.titleIssues.length + result.summary.metaDescIssues.length + result.summary.h1Issues.length, c: '#dc2626' },
+                          { l: 'Missing Alt', v: result.summary.missingAltImages.length, c: '#b45309' },
+                        ].map(s => (
+                          <div key={s.l} style={{ background: '#1c1c1c', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+                            <div style={{ fontFamily: 'Fraunces, serif', fontSize: 26, fontWeight: 300, color: s.c, lineHeight: 1 }}>{s.v}</div>
+                            <div style={{ fontSize: 9, color: '#555', letterSpacing: '.08em', textTransform: 'uppercase', marginTop: 3 }}>{s.l}</div>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Title Issues ── */}
+              {result.summary.titleIssues.length > 0 && (
+                <div className="card">
+                  <div className="card-head">
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>Title Tag Issues</span>
+                      <span style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>{result.summary.titleIssues.length} page(s) affected</span>
+                    </div>
+                    <span className="badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>Needs Fix</span>
+                  </div>
+                  <div className="card-body">
+                    <table>
+                      <thead>
+                        <tr><th>Page</th><th>Title Found</th><th>Length</th><th>Issue</th></tr>
+                      </thead>
+                      <tbody>
+                        {result.summary.titleIssues.map((t, i) => (
+                          <tr key={i}>
+                            <td><span className="url-chip">{shortUrl(t.url)}</span></td>
+                            <td style={{ color: '#555', maxWidth: 200 }}>{t.title ? '"' + t.title.slice(0, 60) + (t.title.length > 60 ? '...' : '') + '"' : <em style={{ color: '#b91c1c' }}>No title tag</em>}</td>
+                            <td style={{ color: t.length === 0 ? '#b91c1c' : t.length < 30 || t.length > 60 ? '#b45309' : '#15803d', fontWeight: 600, whiteSpace: 'nowrap' }}>{t.length} chars</td>
+                            <td style={{ color: '#555' }}>{t.issue}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="fix-box" style={{ margin: '0 16px 16px' }}>
+                      <div className="fix-title">How to Fix</div>
+                      <div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>
+                        In Webflow: <strong>Page Settings &rarr; SEO &rarr; Title</strong>. Write 50-60 characters. Include your primary keyword near the start. Each page should have a unique title that accurately describes the page content.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Meta Description Issues ── */}
+              {result.summary.metaDescIssues.length > 0 && (
+                <div className="card">
+                  <div className="card-head">
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>Meta Description Issues</span>
+                      <span style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>{result.summary.metaDescIssues.length} page(s) affected</span>
+                    </div>
+                    <span className="badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>Needs Fix</span>
+                  </div>
+                  <div className="card-body">
+                    <table>
+                      <thead>
+                        <tr><th>Page</th><th>Description Found</th><th>Length</th><th>Issue</th></tr>
+                      </thead>
+                      <tbody>
+                        {result.summary.metaDescIssues.map((m, i) => (
+                          <tr key={i}>
+                            <td><span className="url-chip">{shortUrl(m.url)}</span></td>
+                            <td style={{ color: '#555', maxWidth: 220 }}>{m.desc ? '"' + m.desc.slice(0, 80) + (m.desc.length > 80 ? '...' : '') + '"' : <em style={{ color: '#b91c1c' }}>No meta description</em>}</td>
+                            <td style={{ color: m.length === 0 ? '#b91c1c' : '#b45309', fontWeight: 600, whiteSpace: 'nowrap' }}>{m.length} chars</td>
+                            <td style={{ color: '#555' }}>{m.issue}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="fix-box" style={{ margin: '0 16px 16px' }}>
+                      <div className="fix-title">How to Fix</div>
+                      <div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>
+                        In Webflow: <strong>Page Settings &rarr; SEO &rarr; Description</strong>. Aim for 140-160 characters. Write a compelling summary that includes your keyword and a call to action. Each page needs a unique meta description.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── H1 Issues ── */}
+              {result.summary.h1Issues.length > 0 && (
+                <div className="card">
+                  <div className="card-head">
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>H1 Heading Issues</span>
+                      <span style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>{result.summary.h1Issues.length} page(s) affected</span>
+                    </div>
+                    <span className="badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>Needs Fix</span>
+                  </div>
+                  <div className="card-body">
+                    <table>
+                      <thead>
+                        <tr><th>Page</th><th>H1 Tags Found</th><th>Issue</th></tr>
+                      </thead>
+                      <tbody>
+                        {result.summary.h1Issues.map((h, i) => (
+                          <tr key={i}>
+                            <td><span className="url-chip">{shortUrl(h.url)}</span></td>
+                            <td style={{ maxWidth: 240 }}>
+                              {h.h1s.length === 0
+                                ? <em style={{ color: '#b91c1c' }}>No H1 found</em>
+                                : h.h1s.map((t, j) => <div key={j} style={{ marginBottom: 2 }}><span className="tag">{t.slice(0, 60)}</span></div>)
+                              }
+                            </td>
+                            <td style={{ color: '#555' }}>{h.issue}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="fix-box" style={{ margin: '0 16px 16px' }}>
+                      <div className="fix-title">How to Fix</div>
+                      <div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>
+                        Every page needs exactly <strong>one H1 tag</strong> — usually the main headline. In Webflow: select the heading element &rarr; Style panel &rarr; set Tag to <strong>H1</strong>. Your H1 should include your primary keyword and clearly describe the page topic.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Missing Alt Text ── */}
+              {result.summary.missingAltImages.length > 0 && (
+                <div className="card">
+                  <div className="card-head">
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>Images Missing Alt Text</span>
+                      <span style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>{result.summary.missingAltImages.length} image(s) affected</span>
+                    </div>
+                    <span className="badge" style={{ background: '#fef9c3', color: '#a16207' }}>Warning</span>
+                  </div>
+                  <div className="card-body">
+                    <table>
+                      <thead>
+                        <tr><th>Page</th><th>Image URL</th><th>Nearby Text</th></tr>
+                      </thead>
+                      <tbody>
+                        {result.summary.missingAltImages.map((img, i) => (
+                          <tr key={i}>
+                            <td style={{ whiteSpace: 'nowrap' }}><span className="url-chip">{shortUrl(img.pageUrl)}</span></td>
+                            <td style={{ maxWidth: 220 }}><span className="tag" style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>{img.imgSrc}</span></td>
+                            <td style={{ color: '#888', fontSize: 11 }}>{img.context || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="fix-box" style={{ margin: '0 16px 16px' }}>
+                      <div className="fix-title">How to Fix</div>
+                      <div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>
+                        In Webflow: click each image &rarr; <strong>Element Settings (gear icon) &rarr; Alt Text</strong>. Write a natural description of what the image shows. Example: "Red Toyota Camry 2024 exterior side view". Avoid keyword stuffing. Decorative images can use empty alt="" but should be rare.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Schema Markup ── */}
+              <div className="card">
+                <div className="card-head">
+                  <span style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>Schema / Structured Data</span>
+                  {result.summary.schemaFound.length > 0
+                    ? <span className="badge" style={{ background: '#dcfce7', color: '#15803d' }}>Detected</span>
+                    : <span className="badge" style={{ background: '#fef9c3', color: '#a16207' }}>Not Found</span>
+                  }
+                </div>
+                <div className="card-body">
+                  {result.summary.schemaFound.length > 0 ? (
+                    <table>
+                      <thead><tr><th>Page</th><th>Schema Types Found</th></tr></thead>
+                      <tbody>
+                        {result.summary.schemaFound.map((s, i) => (
+                          <tr key={i}>
+                            <td><span className="url-chip">{shortUrl(s.url)}</span></td>
+                            <td>{s.types.map((t, j) => <span key={j} className="tag">{t}</span>)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ padding: '16px 20px', color: '#777', fontSize: 13 }}>
+                      No structured data (JSON-LD schema) was found on any crawled page.
+                    </div>
+                  )}
+                  <div className="fix-box" style={{ margin: '0 16px 16px' }}>
+                    <div className="fix-title">{result.summary.schemaFound.length > 0 ? 'Recommended additions' : 'How to Fix'}</div>
+                    <div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>
+                      {result.summary.schemaFound.length > 0
+                        ? 'Good — schema markup is present. Consider adding more types: <strong>LocalBusiness</strong> (address, phone, hours), <strong>Product</strong> (price, reviews), <strong>FAQPage</strong> (for FAQ sections), <strong>BreadcrumbList</strong> (for navigation). Use Google\'s Rich Results Test to validate.'
+                        : 'Add JSON-LD schema markup to your pages. In Webflow: <strong>Page Settings &rarr; Custom Code &rarr; Head Code</strong>. Start with <strong>LocalBusiness</strong> or <strong>Organization</strong> schema. Visit schema.org to find the right type for your business.'
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Homepage Technical Summary ── */}
+              {home && (
+                <div className="card">
+                  <div className="card-head">
+                    <span style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>Homepage Technical Checks</span>
+                  </div>
+                  <div className="card-body">
+                    {[
+                      { label: 'HTTPS', status: home.isHttps ? 'good' : 'error' as CheckStatus, detail: home.isHttps ? 'Secure HTTPS connection' : 'Not using HTTPS — critical ranking factor', fix: !home.isHttps ? 'Enable SSL on your hosting provider. Webflow includes free SSL automatically.' : undefined },
+                      { label: 'Mobile Viewport', status: home.viewport ? 'good' : 'error' as CheckStatus, detail: home.viewport || 'Missing viewport meta tag', fix: !home.viewport ? 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> to your HTML head.' : undefined },
+                      { label: 'Canonical Tag', status: home.canonical ? 'good' : 'warning' as CheckStatus, detail: home.canonical || 'No canonical tag found', fix: !home.canonical ? 'In Webflow: Page Settings > SEO > Canonical URL. Set to the preferred URL of this page.' : undefined },
+                      { label: 'Robots Meta', status: home.robotsStatus, detail: home.robots || 'Not set', fix: home.robotsStatus === 'error' ? 'URGENT: noindex is set — Google will NOT index this page! Remove it in Page Settings > SEO.' : home.robotsStatus === 'warning' ? 'Consider adding <meta name="robots" content="index, follow">.' : undefined },
+                      { label: 'Open Graph', status: (home.ogTitle && home.ogImage ? 'good' : 'warning') as CheckStatus, detail: home.ogTitle ? 'OG title and image present' : 'Missing OG tags — affects social sharing appearance', fix: !home.ogTitle ? 'In Webflow: Page Settings > Open Graph. Add og:title, og:description, and og:image (1200x630px).' : undefined },
+                      { label: 'Word Count', status: (home.wordCount >= 300 ? 'good' : 'warning') as CheckStatus, detail: home.wordCount + ' words on homepage', fix: home.wordCount < 300 ? 'Add more content — at least 300 words. Consider adding service descriptions, FAQs, or testimonials.' : undefined },
+                    ].map((item, i) => {
+                      const b = badge(item.status);
+                      return (
+                        <div key={i} className="row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 20, height: 20, borderRadius: '50%', background: b.bg, color: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{icon(item.status)}</span>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: '#111', flex: 1 }}>{item.label}</span>
+                            <span className="badge" style={{ background: b.bg, color: b.color }}>{b.text}</span>
+                          </div>
+                          <div style={{ paddingLeft: 30, marginTop: 4, fontSize: 12, color: '#777' }}>{item.detail}</div>
+                          {item.fix && (
+                            <div className="fix-box" style={{ marginLeft: 30, marginTop: 6 }}>
+                              <div className="fix-title">How to Fix</div>
+                              <div style={{ fontSize: 12, color: '#555', lineHeight: 1.7 }}>{item.fix}</div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                );
-              })}
-
-              {/* Priority fix list */}
-              {fixItems.length > 0 && (
-                <div className="print-section" style={{ background: '#fff', borderRadius: 16, border: '1px solid #eae7e0', overflow: 'hidden', marginBottom: 16 }}>
-                  <div style={{ padding: '16px 24px', borderBottom: '1px solid #f0ede7', background: '#fafaf8' }}>
-                    <h2 style={{ fontFamily: 'Fraunces, serif', fontSize: 15, fontWeight: 400, color: '#111' }}>Priority Action List</h2>
-                    <p style={{ fontSize: 12, color: '#888', marginTop: 3 }}>Fix these issues to improve your SEO score</p>
-                  </div>
-                  {fixItems
-                    .sort((a, b) => (a.check.status === 'error' ? -1 : b.check.status === 'error' ? 1 : 0))
-                    .map((item, i) => (
-                      <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 24px', borderBottom: i < fixItems.length - 1 ? '1px solid #f5f3ef' : 'none' }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#ccc', minWidth: 20 }}>{i + 1}</span>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.check.status === 'error' ? '#dc2626' : '#ca8a04', flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#111', flex: 1 }}>{item.label}</span>
-                        <span style={{ fontSize: 11, color: '#888' }}>{item.category}</span>
-                      </div>
-                    ))}
                 </div>
               )}
 
-              {/* CTA */}
-              <div className="print-section" style={{ background: '#e8693a', borderRadius: 16, padding: '32px 36px', color: '#fff', textAlign: 'center' }}>
-                <h2 style={{ fontFamily: 'Fraunces, serif', fontSize: 24, fontWeight: 400, marginBottom: 8, letterSpacing: '-0.01em' }}>
-                  Want us to fix these issues?
-                </h2>
-                <p style={{ color: 'rgba(255,255,255,0.88)', marginBottom: 24, fontSize: 14, lineHeight: 1.7, fontWeight: 400 }}>
+              {/* ── Pages crawled ── */}
+              <div className="card">
+                <div className="card-head">
+                  <span style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>Pages Crawled ({result.pagesAudited})</span>
+                </div>
+                <div className="card-body">
+                  <table>
+                    <thead><tr><th>URL</th><th>Title</th><th>Meta Desc</th><th>H1</th><th>Images</th><th>Schema</th></tr></thead>
+                    <tbody>
+                      {result.pages.map((p, i) => (
+                        <tr key={i}>
+                          <td><span className="url-chip">{shortUrl(p.url)}</span></td>
+                          <td>
+                            <span className="badge" style={{ background: badge(p.titleStatus).bg, color: badge(p.titleStatus).color }}>{p.titleLength > 0 ? p.titleLength + 'ch' : 'Missing'}</span>
+                          </td>
+                          <td>
+                            <span className="badge" style={{ background: badge(p.metaDescStatus).bg, color: badge(p.metaDescStatus).color }}>{p.metaDescLength > 0 ? p.metaDescLength + 'ch' : 'Missing'}</span>
+                          </td>
+                          <td>
+                            <span className="badge" style={{ background: badge(p.h1Status).bg, color: badge(p.h1Status).color }}>{p.h1Tags.length === 0 ? 'Missing' : p.h1Tags.length + ' found'}</span>
+                          </td>
+                          <td style={{ color: p.imagesMissingAlt.length > 0 ? '#b45309' : '#15803d', fontWeight: 600 }}>
+                            {p.imagesMissingAlt.length > 0 ? p.imagesMissingAlt.length + ' missing alt' : p.imagesTotal + ' OK'}
+                          </td>
+                          <td style={{ color: p.schemaTypes.length > 0 ? '#15803d' : '#aaa' }}>
+                            {p.schemaTypes.length > 0 ? p.schemaTypes.slice(0, 2).join(', ') : 'None'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ── CTA ── */}
+              <div style={{ background: '#e8693a', borderRadius: 14, padding: '32px 28px', color: '#fff', textAlign: 'center' }}>
+                <h2 style={{ fontFamily: 'Fraunces, serif', fontSize: 24, fontWeight: 400, marginBottom: 8 }}>Want us to fix these issues?</h2>
+                <p style={{ color: 'rgba(255,255,255,.88)', marginBottom: 22, fontSize: 14, fontWeight: 300, lineHeight: 1.75, maxWidth: 440, margin: '0 auto 22px' }}>
                   Next Wave specialises in SEO for New Zealand businesses. Book a free strategy call and we will walk you through exactly what needs to be done.
                 </p>
-                <a
-                  href="https://www.nextwave.nz/contact-us"
-                  target="_self"
-                  rel="noopener noreferrer"
-                  className="cta-btn"
-                  style={{ display: 'inline-block', background: '#111', color: '#fff', padding: '13px 28px', borderRadius: 8, fontWeight: 600, fontSize: 14, textDecoration: 'none', letterSpacing: '0.02em' }}
-                >
+                <a href="https://www.nextwave.nz/contact-us" style={{ display: 'inline-block', background: '#111', color: '#fff', padding: '12px 26px', borderRadius: 8, fontWeight: 600, fontSize: 14, textDecoration: 'none', letterSpacing: '.02em' }}>
                   Book a Free Strategy Call
                 </a>
               </div>

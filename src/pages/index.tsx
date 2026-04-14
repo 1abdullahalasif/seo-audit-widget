@@ -68,10 +68,10 @@ export default function Home() {
     if (!result) return;
     setPsLoading(true);
 
-    // Call Google PageSpeed API directly from browser — no server timeout issues
     const encodedUrl = encodeURIComponent(result.siteUrl);
-    const mobileUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=mobile&category=performance`;
-    const desktopUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=desktop&category=performance`;
+    const key = process.env.NEXT_PUBLIC_PAGESPEED_KEY ? `&key=${process.env.NEXT_PUBLIC_PAGESPEED_KEY}` : '';
+    const mobileUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=mobile&category=performance${key}`;
+    const desktopUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=desktop&category=performance${key}`;
 
     Promise.all([fetch(mobileUrl), fetch(desktopUrl)])
       .then(async ([mRes, dRes]) => {

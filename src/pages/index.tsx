@@ -15,7 +15,7 @@ interface PageData {
   hasDuplicateTitle?: boolean; hasDuplicateMeta?: boolean;
 }
 interface PageSpeed {
-  mobileScore: number; desktopScore: number;
+  mobileScore: number | null; desktopScore: number | null;
   fcp: number; lcp: number; cls: number; tbt: number;
   fcpDisplay: string; lcpDisplay: string; clsDisplay: string; tbtDisplay: string;
   opportunities: { title: string; description: string }[];
@@ -48,8 +48,20 @@ const PC = (s: number) => s >= 90 ? '#0cce6b' : s >= 50 ? '#ffa400' : '#ff4e42';
 const SU = (u: string) => { try { const p = new URL(u); return (p.pathname === '/' ? p.hostname : p.hostname + p.pathname).slice(0, 42); } catch { return u.slice(0, 42); } };
 
 // Circular score gauge SVG
-const ScoreGauge = ({ score, label }: { score: number; label: string }) => {
+const ScoreGauge = ({ score, label }: { score: number | null; label: string }) => {
   const r = 40; const circ = 2 * Math.PI * r;
+  if (score === null) {
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <svg width={100} height={100} viewBox="0 0 100 100">
+          <circle cx={50} cy={50} r={r} fill="none" stroke="#e8e4dc" strokeWidth={8} />
+          <text x={50} y={54} textAnchor="middle" fontSize={13} fontWeight={700} fill="#999" fontFamily="'Plus Jakarta Sans',sans-serif">n/a</text>
+        </svg>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#555', marginTop: 2 }}>{label}</div>
+        <div style={{ fontSize: 10, color: '#999', fontWeight: 700 }}>Not available</div>
+      </div>
+    );
+  }
   const pct = score / 100; const dash = circ * pct; const gap = circ - dash;
   const col = PC(score);
   return (
@@ -67,13 +79,27 @@ const ScoreGauge = ({ score, label }: { score: number; label: string }) => {
   );
 };
 
+// Messages to the host page (nextwave.nz embeds this app in an iframe).
+// nw-seo-height: content height, so the host can size the iframe.
+// nw-seo-start:  an audit request began.
+// nw-seo-submit: the report rendered ({ url, score }); the host uses it for a GA4 conversion.
+// nw-seo-scroll: the host should scroll the iframe's top into view (the report renders above where the user was).
+const postToHost = (msg: Record<string, unknown>) => { if (typeof window !== 'undefined' && window.parent !== window) window.parent.postMessage(msg, '*'); };
+const postHeight = () => { if (typeof document !== 'undefined') postToHost({ type: 'nw-seo-height', height: document.body.scrollHeight }); };
 if (typeof window !== 'undefined') {
-  const rh = () => { if (window.parent !== window) window.parent.postMessage({ type: 'nw-seo-height', height: document.body.scrollHeight }, '*'); };
-  window.addEventListener('load', () => setTimeout(rh, 400));
-  if (typeof MutationObserver !== 'undefined') new MutationObserver(() => setTimeout(rh, 200)).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener('load', () => setTimeout(postHeight, 400));
+  if (typeof MutationObserver !== 'undefined') new MutationObserver(() => setTimeout(postHeight, 200)).observe(document.documentElement, { childList: true, subtree: true });
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => postHeight()).observe(document.body);
 }
 
 export default function Home() {
+  // ?embed=1 hides the app's own header, intro and feature tiles when it sits inside a page that already has them.
+  const [embed, setEmbed] = useState(false);
+  useEffect(() => {
+    const isEmbed = new URLSearchParams(window.location.search).get('embed') === '1';
+    setEmbed(isEmbed);
+    if (isEmbed) document.body.classList.add('embed');
+  }, []);
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -90,18 +116,31 @@ export default function Home() {
     setPsLoading(true); setPsError(false);
     const encodedUrl = encodeURIComponent(result.siteUrl);
     const key = process.env.NEXT_PUBLIC_PAGESPEED_KEY ? `&key=${process.env.NEXT_PUBLIC_PAGESPEED_KEY}` : '';
-    const mobileUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=mobile&category=performance${key}`;
-    const desktopUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=desktop&category=performance${key}`;
-    Promise.all([fetch(mobileUrl), fetch(desktopUrl)])
-      .then(async ([mRes, dRes]) => {
-        if (!mRes.ok || !dRes.ok) { setPsError(true); return null; }
-        const [mobile, desktop] = await Promise.all([mRes.json(), dRes.json()]);
-        const mc = mobile?.lighthouseResult?.categories?.performance?.score ?? 0;
-        const dc = desktop?.lighthouseResult?.categories?.performance?.score ?? 0;
-        const audits = mobile?.lighthouseResult?.audits ?? {};
-        return {
-          mobileScore: Math.round(mc * 100),
-          desktopScore: Math.round(dc * 100),
+    const psUrl = (strategy: 'mobile' | 'desktop') => `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodedUrl}&strategy=${strategy}&category=performance${key}`;
+    // Each strategy is fetched on its own and retried once, so a failed mobile run
+    // shows as "not available" instead of a zero and never blanks the desktop result.
+    type LH = { lighthouseResult?: { runtimeError?: { code?: string }; categories?: { performance?: { score?: number | null } }; audits?: Record<string, { score: number | null; title: string; description: string; numericValue?: number; displayValue?: string; details?: { type: string } }> } } | null;
+    const fetchOne = async (strategy: 'mobile' | 'desktop', attempt = 0): Promise<LH> => {
+      try {
+        const r = await fetch(psUrl(strategy));
+        if (!r.ok) throw new Error(String(r.status));
+        const j = (await r.json()) as LH;
+        if (j?.lighthouseResult?.runtimeError?.code && j.lighthouseResult.runtimeError.code !== 'NO_ERROR') throw new Error(j.lighthouseResult.runtimeError.code);
+        return j;
+      } catch {
+        if (attempt < 1) { await new Promise(res => setTimeout(res, 5000)); return fetchOne(strategy, attempt + 1); }
+        return null;
+      }
+    };
+    const scoreOf = (j: LH) => { const s = j?.lighthouseResult?.categories?.performance?.score; return typeof s === 'number' ? Math.round(s * 100) : null; };
+    Promise.all([fetchOne('mobile'), fetchOne('desktop')])
+      .then(([mobile, desktop]) => {
+        if (!mobile && !desktop) { setPsError(true); return; }
+        const src = mobile ?? desktop;
+        const audits = src?.lighthouseResult?.audits ?? {};
+        setPs({
+          mobileScore: scoreOf(mobile),
+          desktopScore: scoreOf(desktop),
           fcp: audits['first-contentful-paint']?.numericValue ?? 0,
           lcp: audits['largest-contentful-paint']?.numericValue ?? 0,
           cls: audits['cumulative-layout-shift']?.numericValue ?? 0,
@@ -110,19 +149,19 @@ export default function Home() {
           lcpDisplay: audits['largest-contentful-paint']?.displayValue ?? '',
           clsDisplay: audits['cumulative-layout-shift']?.displayValue ?? '',
           tbtDisplay: audits['total-blocking-time']?.displayValue ?? '',
-          opportunities: Object.values(audits as Record<string, { score: number; title: string; description: string; details?: { type: string } }>)
-            .filter(a => a.score !== null && a.score < 0.9 && a.details?.type === 'opportunity')
+          opportunities: Object.values(audits)
+            .filter(a => a.score !== null && (a.score as number) < 0.9 && a.details?.type === 'opportunity')
             .slice(0, 6).map(a => ({ title: a.title, description: a.description })),
-        };
+        });
       })
-      .then(d => { if (d) setPs(d); else setPsError(true); })
       .catch(() => setPsError(true))
-      .finally(() => setPsLoading(false));
+      .finally(() => { setPsLoading(false); setTimeout(postHeight, 300); });
   }, [result]);
 
   const submit = async () => {
     if (!url || !name || !email) { setError('Please fill in all fields.'); return; }
     setError(null); setLoading(true); setResult(null); setPs(null); setPsError(false);
+    postToHost({ type: 'nw-seo-start' });
     const msgs = ['Fetching your homepage...', 'Checking sitemap & robots.txt...', 'Crawling internal pages...', 'Checking for broken links...', 'Detecting duplicate content...', 'Building your report...'];
     let i = 0; setLoadingMsg(msgs[0]);
     const iv = setInterval(() => { i = Math.min(i + 1, msgs.length - 1); setLoadingMsg(msgs[i]); }, 3500);
@@ -130,7 +169,12 @@ export default function Home() {
       const res = await fetch('/api/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, name, email }) });
       const data = await res.json();
       if (!res.ok) setError(data.error || 'Something went wrong.');
-      else setResult(data);
+      else {
+        setResult(data);
+        postToHost({ type: 'nw-seo-submit', url: data.siteUrl, score: data.score });
+        postToHost({ type: 'nw-seo-scroll' });
+        setTimeout(postHeight, 400); setTimeout(postHeight, 1500);
+      }
     } catch { setError('Network error. Please check your connection.'); }
     finally { clearInterval(iv); setLoading(false); setLoadingMsg(''); }
   };
@@ -178,7 +222,21 @@ export default function Home() {
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Fraunces:wght@300;400;600&display=swap" rel="stylesheet" />
         <style>{`
           *{box-sizing:border-box;margin:0;padding:0}
+          html,body{overflow-x:hidden;max-width:100%}
           body{font-family:'Plus Jakarta Sans',sans-serif;background:#f7f6f2;color:#1a1a1a;font-size:14px;line-height:1.5}
+          body.embed{background:#fff}
+          body.embed .np,body.embed .intro,body.embed .feat,body.embed .form-h2{display:none!important}
+          body.embed main{padding-top:0!important}
+          /* Tables scroll inside their card on narrow screens instead of squeezing URLs to one character per line */
+          .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+          .tw table{min-width:560px}
+          .tw.wide table{min-width:760px}
+          .pgcards{display:none}
+          .pgcard{padding:12px 16px;border-bottom:1px solid #f5f2ec;display:grid;gap:6px}
+          .pgcard:last-child{border-bottom:none}
+          .pgcard .kv{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#555}
+          .pgcard .kv b{color:#888;font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+          @media(max-width:600px){.pgtable{display:none}.pgcards{display:block}}
           input,button{font-family:inherit}
           input:focus{outline:2px solid #e8693a;outline-offset:-2px;border-color:#e8693a!important}
           @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -193,8 +251,8 @@ export default function Home() {
           .badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;padding:2px 7px;border-radius:99px;text-transform:uppercase;white-space:nowrap}
           .fix{background:#fef6f2;border-left:3px solid #e8693a;border-radius:0 6px 6px 0;padding:10px 12px;margin-top:8px}
           .fix-t{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#e8693a;margin-bottom:4px}
-          .tag{display:inline-block;background:#f0ece5;color:#444;font-size:10px;padding:2px 8px;border-radius:4px;margin:2px 2px 2px 0;font-family:monospace;word-break:break-all}
-          .chip{display:inline-block;background:#f0ece5;color:#555;font-size:11px;padding:2px 8px;border-radius:4px;font-family:monospace;word-break:break-all;max-width:100%}
+          .tag{display:inline-block;background:#f0ece5;color:#444;font-size:10px;padding:2px 8px;border-radius:4px;margin:2px 2px 2px 0;font-family:monospace;overflow-wrap:anywhere}
+          .chip{display:inline-block;background:#f0ece5;color:#555;font-size:11px;padding:2px 8px;border-radius:4px;font-family:monospace;overflow-wrap:anywhere;max-width:100%}
           .sbtn{width:100%;padding:13px;background:#e8693a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
           .sbtn:hover:not(:disabled){background:#c95a2a}
           .sbtn:disabled{background:#bbb;cursor:not-allowed}
@@ -242,6 +300,10 @@ export default function Home() {
             .row:hover{background:transparent!important}
 
             /* Tables */
+            .tw{overflow:visible!important}
+            .tw table,.tw.wide table{min-width:0!important;width:100%!important;table-layout:fixed!important}
+            td,th{overflow-wrap:anywhere!important;word-break:normal!important}
+            .pgtable,.pgcards{display:none!important}
             table{font-size:9px!important}
             th{padding:4px 8px!important;font-size:8px!important;background:#f7f6f2!important}
             td{padding:5px 8px!important}
@@ -286,13 +348,13 @@ export default function Home() {
           {/* ── FORM ── */}
           {!result && (
             <div className="fade">
-              <div style={{ textAlign: 'center', marginBottom: 32 }}>
+              <div className="intro" style={{ textAlign: 'center', marginBottom: 32 }}>
                 <span style={{ display: 'inline-block', background: '#e8693a', color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: '.14em', padding: '4px 12px', borderRadius: 99, marginBottom: 14, textTransform: 'uppercase' }}>Free Tool</span>
                 <h1 style={{ fontFamily: 'Fraunces,serif', fontSize: 'clamp(26px,5vw,44px)', fontWeight: 300, lineHeight: 1.15, color: '#111', marginBottom: 10 }}>Website SEO Audit</h1>
                 <p style={{ color: '#666', fontSize: 14, maxWidth: 440, margin: '0 auto', lineHeight: 1.8, fontWeight: 300 }}>Get a full SEO analysis of your website. We check page speed, meta tags, headings, images, broken links and more.</p>
               </div>
-              <div className="card" style={{ padding: '28px 24px 24px' }}>
-                <h2 style={{ fontFamily: 'Fraunces,serif', fontSize: 18, fontWeight: 400, marginBottom: 20, color: '#111' }}>Start Your Free Audit</h2>
+              <div className="card" style={{ padding: embed ? '4px 0 0' : '28px 24px 24px', border: embed ? 'none' : undefined, background: embed ? 'transparent' : undefined }}>
+                <h2 className="form-h2" style={{ fontFamily: 'Fraunces,serif', fontSize: 18, fontWeight: 400, marginBottom: 20, color: '#111' }}>Start Your Free Audit</h2>
                 {[
                   { label: 'Website URL', ph: 'https://yourbusiness.co.nz', val: url, set: setUrl, type: 'text' },
                   { label: 'Your Name', ph: 'Jane Smith', val: name, set: setName, type: 'text' },
@@ -309,7 +371,7 @@ export default function Home() {
                 </button>
                 <p style={{ fontSize: 11, color: '#aaa', marginTop: 10, textAlign: 'center' }}>Free to use. No credit card required. Results in under 60 seconds.</p>
               </div>
-              <div className="cg" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 12 }}>
+              <div className="cg feat" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 12 }}>
                 {[['📄','Page-by-Page','Title, meta, H1 on every page'],['⚡','Core Web Vitals','FCP, LCP, TBT, CLS scores'],['🔗','Broken Links','Detects 404 and dead links'],['📋','Schema Detail','Lists all structured data found']].map(([ic,t,d]) => (
                   <div key={t} style={{ background: '#fff', borderRadius: 10, padding: '14px 12px', border: '1px solid #e8e4dc', textAlign: 'center' }}>
                     <div style={{ fontSize: 20, marginBottom: 5 }}>{ic}</div>
@@ -379,19 +441,20 @@ export default function Home() {
                     <span className="ss">Homepage · Mobile & Desktop</span>
                   </div>
                   {psLoading && <span style={{ fontSize: 11, color: '#aaa', animation: 'pulse 1.2s ease infinite' }}>Running analysis...</span>}
-                  {ps && <span className="badge" style={{ background: PC(ps.mobileScore) === '#0cce6b' ? '#dcfce7' : PC(ps.mobileScore) === '#ffa400' ? '#fef9c3' : '#fee2e2', color: PC(ps.mobileScore) === '#0cce6b' ? '#15803d' : PC(ps.mobileScore) === '#ffa400' ? '#a16207' : '#b91c1c' }}>Mobile {ps.mobileScore}/100</span>}
+                  {ps && ps.mobileScore !== null && <span className="badge" style={{ background: PC(ps.mobileScore) === '#0cce6b' ? '#dcfce7' : PC(ps.mobileScore) === '#ffa400' ? '#fef9c3' : '#fee2e2', color: PC(ps.mobileScore) === '#0cce6b' ? '#15803d' : PC(ps.mobileScore) === '#ffa400' ? '#a16207' : '#b91c1c' }}>Mobile {ps.mobileScore}/100</span>}
+                  {ps && ps.mobileScore === null && <span className="badge" style={{ background: '#f0ece5', color: '#777' }}>Mobile not available</span>}
                 </div>
 
                 {psLoading && (
                   <div style={{ padding: '28px', textAlign: 'center' }}>
                     <span style={{ width: 24, height: 24, border: '3px solid #e8e4dc', borderTopColor: '#e8693a', borderRadius: '50%', display: 'inline-block', animation: 'spin .8s linear infinite' }} />
-                    <p style={{ marginTop: 12, color: '#999', fontSize: 12 }}>Analysing page speed with Google Lighthouse...<br /><span style={{ fontSize: 11, color: '#ccc' }}>This takes 15–30 seconds</span></p>
+                    <p style={{ marginTop: 12, color: '#999', fontSize: 12 }}>Analysing page speed with Google Lighthouse...<br /><span style={{ fontSize: 11, color: '#ccc' }}>This takes 15 to 30 seconds</span></p>
                   </div>
                 )}
 
                 {psError && !psLoading && (
                   <div style={{ padding: '16px 20px', color: '#888', fontSize: 12 }}>
-                    PageSpeed data could not be loaded. This may be due to rate limiting try again in a few minutes.
+                    Google PageSpeed could not be reached for this site. It is usually rate limiting; run the audit again in a few minutes.
                   </div>
                 )}
 
@@ -404,9 +467,15 @@ export default function Home() {
                       <ScoreGauge score={ps.desktopScore} label="Desktop" />
                     </div>
 
+                    {(ps.mobileScore === null || ps.desktopScore === null) && (
+                      <p style={{ textAlign: 'center', fontSize: 11, color: '#888', marginTop: -12, marginBottom: 18 }}>
+                        One of Google's Lighthouse runs did not complete for this site. That is a Google-side timeout, not a fault on your website. Run the audit again to fill it in.
+                      </p>
+                    )}
+
                     {/* Score legend */}
                     <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
-                      {[['#0cce6b','90–100','Fast'],['#ffa400','50–89','Needs Improvement'],['#ff4e42','0–49','Slow']].map(([c,r,l]) => (
+                      {[['#0cce6b','90 to 100','Fast'],['#ffa400','50 to 89','Needs Improvement'],['#ff4e42','0 to 49','Slow']].map(([c,r,l]) => (
                         <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#777' }}>
                           <span style={{ width: 10, height: 10, borderRadius: '50%', background: c, display: 'inline-block' }} />
                           <span style={{ fontWeight: 600, color: c }}>{r}</span> {l}
@@ -524,7 +593,7 @@ export default function Home() {
               {result.summary.titleIssues.length > 0 && (
                 <div className="card">
                   <div className="ch"><div><span className="st">Title Tag Issues</span><span className="ss">{result.summary.titleIssues.length} page(s) affected</span></div><span className="badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>Fix Needed</span></div>
-                  <table><thead><tr><th>Page URL</th><th>Title Found</th><th>Chars</th><th>Issue</th></tr></thead>
+                  <div className="tw"><table><thead><tr><th>Page URL</th><th>Title Found</th><th>Chars</th><th>Issue</th></tr></thead>
                     <tbody>{result.summary.titleIssues.map((t, i) => (
                       <tr key={i}><td><span className="chip">{SU(t.url)}</span></td>
                         <td style={{ color: '#555', maxWidth: 200 }}>{t.title ? `"${t.title.slice(0,55)}${t.title.length>55?'...':''}"` : <em style={{ color: '#b91c1c' }}>Missing</em>}</td>
@@ -532,7 +601,7 @@ export default function Home() {
                         <td style={{ color: '#555', fontSize: 11 }}>{t.issue}</td>
                       </tr>))}
                     </tbody>
-                  </table>
+                  </table></div>
                   {result.summary.duplicateTitles.length > 0 && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid #f0ece5', background: '#fffbf5' }}>
                       <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', marginBottom: 8, letterSpacing: '.06em', textTransform: 'uppercase' }}>Duplicate Titles Detected</div>
@@ -552,7 +621,7 @@ export default function Home() {
               {result.summary.metaDescIssues.length > 0 && (
                 <div className="card">
                   <div className="ch"><div><span className="st">Meta Description Issues</span><span className="ss">{result.summary.metaDescIssues.length} page(s) affected</span></div><span className="badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>Fix Needed</span></div>
-                  <table><thead><tr><th>Page URL</th><th>Description Found</th><th>Chars</th><th>Issue</th></tr></thead>
+                  <div className="tw"><table><thead><tr><th>Page URL</th><th>Description Found</th><th>Chars</th><th>Issue</th></tr></thead>
                     <tbody>{result.summary.metaDescIssues.map((m, i) => (
                       <tr key={i}><td><span className="chip">{SU(m.url)}</span></td>
                         <td style={{ color: '#555', maxWidth: 220 }}>{m.desc ? `"${m.desc.slice(0,80)}${m.desc.length>80?'...':''}"` : <em style={{ color: '#b91c1c' }}>Missing</em>}</td>
@@ -560,7 +629,7 @@ export default function Home() {
                         <td style={{ color: '#555', fontSize: 11 }}>{m.issue}</td>
                       </tr>))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Webflow: <strong>Page Settings → SEO → Description</strong>. Aim for 140-160 characters. Write a compelling summary with your keyword and a call to action (e.g. "Get a free quote today"). Each page needs a unique meta description duplicate descriptions hurt CTR.</div></div>
                 </div>
               )}
@@ -569,14 +638,14 @@ export default function Home() {
               {result.summary.h1Issues.length > 0 && (
                 <div className="card">
                   <div className="ch"><div><span className="st">H1 Heading Issues</span><span className="ss">{result.summary.h1Issues.length} page(s) affected</span></div><span className="badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>Fix Needed</span></div>
-                  <table><thead><tr><th>Page URL</th><th>H1 Tags Found</th><th>Issue</th></tr></thead>
+                  <div className="tw"><table><thead><tr><th>Page URL</th><th>H1 Tags Found</th><th>Issue</th></tr></thead>
                     <tbody>{result.summary.h1Issues.map((h, i) => (
                       <tr key={i}><td><span className="chip">{SU(h.url)}</span></td>
                         <td style={{ maxWidth: 260 }}>{h.h1s.length===0 ? <em style={{ color:'#b91c1c' }}>None found</em> : h.h1s.map((t,j)=><div key={j}><span className="tag">{t.slice(0,65)}</span></div>)}</td>
                         <td style={{ color: '#555', fontSize: 11 }}>{h.issue}</td>
                       </tr>))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Every page needs exactly <strong>one H1 tag</strong> usually your main headline. In Webflow: select the heading element → Style panel → change Tag to H1. If you have 2 H1s, change the decorative/secondary one to H2. Your H1 should include your primary keyword naturally.</div></div>
                 </div>
               )}
@@ -585,14 +654,14 @@ export default function Home() {
               {result.summary.missingAltImages.length > 0 && (
                 <div className="card">
                   <div className="ch"><div><span className="st">Images Missing Alt Text</span><span className="ss">{result.summary.missingAltImages.length} image(s) across all pages</span></div><span className="badge" style={{ background: '#fef9c3', color: '#a16207' }}>Warning</span></div>
-                  <table><thead><tr><th>Page</th><th>Image URL</th><th>Nearby Context</th></tr></thead>
+                  <div className="tw"><table><thead><tr><th>Page</th><th>Image URL</th><th>Nearby Context</th></tr></thead>
                     <tbody>{result.summary.missingAltImages.map((img, i) => (
                       <tr key={i}><td style={{ whiteSpace:'nowrap' }}><span className="chip">{SU(img.pageUrl)}</span></td>
                         <td><span className="tag" style={{ whiteSpace:'normal' }}>{img.imgSrc}</span></td>
-                        <td style={{ color:'#888', fontSize:11 }}>{img.context||'—'}</td>
+                        <td style={{ color:'#888', fontSize:11 }}>{img.context||'none'}</td>
                       </tr>))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Webflow: click each image → gear icon → <strong>Alt Text</strong>. Write a natural, descriptive sentence: e.g. "Next Wave team working on SEO strategy in Hamilton office". For logos and icons, use the company or icon name. Empty alt (alt="") is acceptable only for purely decorative images.</div></div>
                 </div>
               )}
@@ -601,14 +670,14 @@ export default function Home() {
               {result.summary.brokenLinks.length > 0 && (
                 <div className="card">
                   <div className="ch"><div><span className="st">Broken Links</span><span className="ss">{result.summary.brokenLinks.length} broken link(s) found</span></div><span className="badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>Fix Needed</span></div>
-                  <table><thead><tr><th>Found On Page</th><th>Broken URL</th><th>Error Code</th></tr></thead>
+                  <div className="tw"><table><thead><tr><th>Found On Page</th><th>Broken URL</th><th>Error Code</th></tr></thead>
                     <tbody>{result.summary.brokenLinks.map((l, i) => (
                       <tr key={i}><td><span className="chip">{SU(l.pageUrl)}</span></td>
                         <td><span className="tag" style={{ whiteSpace:'normal' }}>{l.linkUrl}</span></td>
                         <td><span className="badge" style={{ background:'#fee2e2', color:'#b91c1c' }}>{l.status} {l.status===404?'Not Found':l.status===410?'Gone':'Error'}</span></td>
                       </tr>))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Update or remove each broken link in Webflow. For 404 errors, either fix the destination URL or redirect the broken URL. Use Google Search Console → Coverage → Crawl Errors to monitor ongoing broken links.</div></div>
                 </div>
               )}
@@ -617,14 +686,14 @@ export default function Home() {
               {result.summary.thinPages.length > 0 && (
                 <div className="card">
                   <div className="ch"><div><span className="st">Thin Content Pages</span><span className="ss">Under 300 words</span></div><span className="badge" style={{ background: '#fef9c3', color: '#a16207' }}>Warning</span></div>
-                  <table><thead><tr><th>Page URL</th><th>Word Count</th><th>Recommendation</th></tr></thead>
+                  <div className="tw"><table><thead><tr><th>Page URL</th><th>Word Count</th><th>Recommendation</th></tr></thead>
                     <tbody>{result.summary.thinPages.map((p, i) => (
                       <tr key={i}><td><span className="chip">{SU(p.url)}</span></td>
                         <td style={{ fontWeight:600, color:'#b45309' }}>{p.wordCount} words</td>
                         <td style={{ fontSize:11, color:'#555' }}>Aim for 300+ words of meaningful content</td>
                       </tr>))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <div className="fix" style={{ margin: '0 16px 14px' }}><div className="fix-t">How to Fix</div><div style={{ fontSize: 12, color: '#555', lineHeight: 1.75 }}>Pages under 300 words are considered thin content and tend to rank poorly. Add meaningful content: service descriptions, FAQs, testimonials, location-specific information, or case studies. Quality matters more than quantity focus on content that genuinely helps your visitors.</div></div>
                 </div>
               )}
@@ -633,7 +702,7 @@ export default function Home() {
               <div className="card">
                 <div className="ch"><span className="st">Schema / Structured Data</span>{result.summary.schemaFound.length > 0 ? <span className="badge" style={{ background:'#dcfce7', color:'#15803d' }}>Detected</span> : <span className="badge" style={{ background:'#fef9c3', color:'#a16207' }}>Not Found</span>}</div>
                 {result.summary.schemaFound.length > 0
-                  ? <table><thead><tr><th>Page URL</th><th>Schema Types Detected</th></tr></thead><tbody>{result.summary.schemaFound.map((s,i)=><tr key={i}><td><span className="chip">{SU(s.url)}</span></td><td>{s.types.map((t,j)=><span key={j} className="tag">{t}</span>)}</td></tr>)}</tbody></table>
+                  ? <div className="tw"><table><thead><tr><th>Page URL</th><th>Schema Types Detected</th></tr></thead><tbody>{result.summary.schemaFound.map((s,i)=><tr key={i}><td><span className="chip">{SU(s.url)}</span></td><td>{s.types.map((t,j)=><span key={j} className="tag">{t}</span>)}</td></tr>)}</tbody></table></div>
                   : <div style={{ padding:'14px 20px', color:'#777', fontSize:13 }}>No structured data (JSON-LD schema) was found on any crawled page.</div>
                 }
                 <div className="fix" style={{ margin:'0 16px 14px' }}>
@@ -649,7 +718,7 @@ export default function Home() {
               {/* Pages overview table */}
               <div className="card">
                 <div className="ch"><span className="st">All Pages Crawled ({result.pagesAudited})</span></div>
-                <table><thead><tr><th>URL</th><th>Title</th><th>Meta Desc</th><th>H1</th><th>Words</th><th>Images</th><th>Schema</th></tr></thead>
+                <div className="tw wide pgtable"><table><thead><tr><th>URL</th><th>Title</th><th>Meta Desc</th><th>H1</th><th>Words</th><th>Images</th><th>Schema</th></tr></thead>
                   <tbody>{result.pages.map((p, i) => {
                     const tb=B(p.titleStatus),mb=B(p.metaDescStatus),hb=B(p.h1Status);
                     return <tr key={i}>
@@ -662,14 +731,27 @@ export default function Home() {
                       <td style={{ color:p.schemaTypes.length>0?'#15803d':'#aaa', fontSize:11 }}>{p.schemaTypes.length>0?p.schemaTypes.slice(0,2).join(', '):'None'}</td>
                     </tr>;
                   })}</tbody>
-                </table>
+                </table></div>
+                <div className="pgcards">
+                  {result.pages.map((p, i) => (
+                    <div key={i} className="pgcard">
+                      <span className="chip">{SU(p.url)}</span>
+                      <div className="kv"><b>Title</b><span>{p.titleLength>0?p.titleLength+' characters':'Missing'}</span></div>
+                      <div className="kv"><b>Meta description</b><span>{p.metaDescLength>0?p.metaDescLength+' characters':'Missing'}</span></div>
+                      <div className="kv"><b>H1</b><span>{p.h1Tags.length===0?'None':p.h1Tags.length}</span></div>
+                      <div className="kv"><b>Words</b><span style={{ color:p.isThin?'#b45309':'#15803d', fontWeight:600 }}>{p.wordCount}</span></div>
+                      <div className="kv"><b>Images</b><span>{p.imagesMissingAlt.length>0?p.imagesMissingAlt.length+' missing alt':p.imagesTotal+' OK'}</span></div>
+                      <div className="kv"><b>Schema</b><span>{p.schemaTypes.length>0?p.schemaTypes.slice(0,2).join(', '):'None'}</span></div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* CTA */}
               <div className="cta-section" style={{ background:'#e8693a', borderRadius:14, padding:'28px 24px', color:'#fff', textAlign:'center' }}>
                 <h2 style={{ fontFamily:'Fraunces,serif', fontSize:22, fontWeight:400, marginBottom:8 }}>Want us to fix these issues?</h2>
-                <p style={{ color:'rgba(255,255,255,.88)', marginBottom:20, fontSize:13, fontWeight:300, lineHeight:1.8, maxWidth:440, margin:'0 auto 20px' }}>Next Wave specialises in SEO for New Zealand businesses. Book a free strategy call and we will walk you through exactly what needs to be done.</p>
-                <a href="https://www.nextwave.nz/contact-us" style={{ display:'inline-block', background:'#111', color:'#fff', padding:'12px 24px', borderRadius:8, fontWeight:600, fontSize:13, textDecoration:'none' }}>Book a Free Strategy Call</a>
+                <p style={{ color:'rgba(255,255,255,.88)', marginBottom:20, fontSize:13, fontWeight:300, lineHeight:1.8, maxWidth:440, margin:'0 auto 20px' }}>Next Wave specialises in SEO for New Zealand businesses. Book a free consultation and we will walk you through exactly what needs to be done.</p>
+                <a href="https://www.nextwave.nz/contact-us" style={{ display:'inline-block', background:'#111', color:'#fff', padding:'12px 24px', borderRadius:8, fontWeight:600, fontSize:13, textDecoration:'none' }}>Book a free consultation</a>
               </div>
             </div>
           )}

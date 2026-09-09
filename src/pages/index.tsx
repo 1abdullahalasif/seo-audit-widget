@@ -85,7 +85,7 @@ const ScoreGauge = ({ score, label }: { score: number | null; label: string }) =
 // nw-seo-submit: the report rendered ({ url, score }); the host uses it for a GA4 conversion.
 // nw-seo-scroll: the host should scroll the iframe's top into view (the report renders above where the user was).
 const postToHost = (msg: Record<string, unknown>) => { if (typeof window !== 'undefined' && window.parent !== window) window.parent.postMessage(msg, '*'); };
-const postHeight = () => { if (typeof document !== 'undefined') postToHost({ type: 'nw-seo-height', height: document.body.scrollHeight }); };
+const postHeight = () => { if (typeof document !== 'undefined') postToHost({ type: 'nw-seo-height', height: Math.max(document.body.offsetHeight, document.documentElement.offsetHeight) }); };
 if (typeof window !== 'undefined') {
   window.addEventListener('load', () => setTimeout(postHeight, 400));
   if (typeof MutationObserver !== 'undefined') new MutationObserver(() => setTimeout(postHeight, 200)).observe(document.documentElement, { childList: true, subtree: true });
@@ -98,7 +98,7 @@ export default function Home() {
   useEffect(() => {
     const isEmbed = new URLSearchParams(window.location.search).get('embed') === '1';
     setEmbed(isEmbed);
-    if (isEmbed) document.body.classList.add('embed');
+    if (isEmbed) { document.body.classList.add('embed'); document.documentElement.classList.add('embed'); }
   }, []);
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
@@ -224,7 +224,8 @@ export default function Home() {
           *{box-sizing:border-box;margin:0;padding:0}
           html,body{overflow-x:hidden;max-width:100%}
           body{font-family:'Plus Jakarta Sans',sans-serif;background:#f7f6f2;color:#1a1a1a;font-size:14px;line-height:1.5}
-          body.embed{background:#fff}
+          body.embed{background:transparent}
+          html.embed,body.embed{min-height:0;height:auto}
           body.embed .np,body.embed .intro,body.embed .feat,body.embed .form-h2{display:none!important}
           body.embed main{padding-top:0!important}
           /* Tables scroll inside their card on narrow screens instead of squeezing URLs to one character per line */
@@ -327,7 +328,7 @@ export default function Home() {
           }
         `}</style>
       </Head>
-      <div style={{ minHeight: '100vh', background: '#f7f6f2' }}>
+      <div style={{ minHeight: embed ? 0 : '100vh', background: embed ? 'transparent' : '#f7f6f2' }}>
 
         {/* Screen nav */}
         <div className="np" style={{ background: '#111', padding: '0 24px', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -343,7 +344,7 @@ export default function Home() {
           </div>
         )}
 
-        <main style={{ maxWidth: 860, margin: '0 auto', padding: '36px 16px 80px' }}>
+        <main style={{ maxWidth: 860, margin: '0 auto', padding: embed ? '8px 0 8px' : '36px 16px 80px' }}>
 
           {/* ── FORM ── */}
           {!result && (
